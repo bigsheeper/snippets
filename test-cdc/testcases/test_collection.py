@@ -16,8 +16,8 @@ def test_collection():
     load_collections_on_primary(collection_names)
     wait_for_secondary_load_collections(collection_names)
 
-    # release_collections_on_primary(collection_names)
-    # wait_for_secondary_release_collections(collection_names)
+    release_collections_on_primary(collection_names)
+    wait_for_secondary_release_collections(collection_names)
 
     drop_collections_on_primary(collection_names)
     wait_for_secondary_drop_collections(collection_names)

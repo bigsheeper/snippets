@@ -1,4 +1,5 @@
 import time
+from loguru import logger
 from common import *
 from collection import *
 
@@ -16,7 +17,7 @@ def default_index_params():
 def create_index_on_primary(collection_name):
     index_params = default_index_params()
     primary_client.create_index(collection_name, index_params=index_params)
-    print(f"Index created on primary, name: {collection_name}")
+    logger.info(f"Index created on primary, name: {collection_name}")
 
 
 def create_indexes_on_primary(collection_names):
@@ -31,10 +32,11 @@ def wait_for_secondary_create_index(collection_name):
         if index_info is not None:
             break
         if time.time() - start_time > TIMEOUT:
-            raise TimeoutError(
-                f"Timeout waiting for index to be created on secondary: {collection_name}")
+            error_msg = f"Timeout waiting for index to be created on secondary: {collection_name}"
+            logger.error(error_msg)
+            raise TimeoutError(error_msg)
         time.sleep(1)
-    print(f"Index created on secondary, name: {collection_name}")
+    logger.info(f"Index created on secondary, name: {collection_name}")
 
 
 def wait_for_secondary_create_indexes(collection_names):

@@ -1,5 +1,6 @@
 import random
 import time
+from loguru import logger
 from common import *
 from collection import *
 
@@ -17,63 +18,23 @@ def generate_data(n, start_id, dim=DEFAULT_DIM):
     return vectors
 
 
-def insert_into_primary(collection_name):
-    current_id = 1
+def insert_into_primary_multiple_rounds(collection_name):
+    start_id = 1
     for _ in range(INSERT_ROUNDS):
-        data = generate_data(INSERT_COUNT, start_id=current_id, dim=DEFAULT_DIM)
-        primary_client.insert(collection_name, data)
-        print(f"Inserted {INSERT_COUNT} data into primary")
-        current_id += INSERT_COUNT
+        insert_into_primary(start_id, collection_name)
+        start_id += INSERT_COUNT
 
 
-def delete_from_primary(collection_name):
-    delete_expr = f"{PK_FIELD_NAME} <= {DELETE_COUNT}"
+def insert_into_primary(start_id, collection_name):
+    data = generate_data(INSERT_COUNT, start_id=start_id, dim=DEFAULT_DIM)
+    primary_client.insert(collection_name, data)
+    logger.info(f"Inserted {INSERT_COUNT} data into primary, start_id: {start_id}")
+    return start_id + INSERT_COUNT
+
+
+def delete_from_primary(collection_name, delete_expr):
     primary_client.delete(
         collection_name=collection_name,
         filter=delete_expr
     )
-    print(f"Deleted data from primary, expr: {delete_expr}")
-
-
-def query_on_primary(collection_name, expected_count):
-    query_expr = f"{PK_FIELD_NAME} >= 0"
-    res = primary_client.query(
-        collection_name=collection_name,
-        consistency_level="Strong",
-        filter=query_expr,
-        output_fields=[PK_FIELD_NAME]
-    )
-    if len(res) != expected_count:
-        raise ValueError(
-            f"Query result count not match on primary: expected={expected_count}, actual={len(res)}")
-    return res
-
-
-def query_on_secondary(collection_name):
-    query_expr = f"{PK_FIELD_NAME} >= 0"
-    res = secondary_client.query(
-        collection_name=collection_name,
-        consistency_level="Strong",
-        filter=query_expr,
-        output_fields=[PK_FIELD_NAME]
-    )
-    return res
-
-
-def wait_for_secondary_query(collection_name, res_on_primary):
-    start_time = time.time()
-    while True:
-        res_on_secondary = query_on_secondary(collection_name)
-        if len(res_on_secondary) != len(res_on_primary):
-            print(
-                f"Length not match: primary={len(res_on_primary)}, secondary={len(res_on_secondary)}")
-        else:
-            ids_primary = sorted([item[PK_FIELD_NAME] for item in res_on_primary])
-            ids_secondary = sorted([item[PK_FIELD_NAME] for item in res_on_secondary])
-            if ids_primary == ids_secondary:
-                break
-        time.sleep(1)
-        if time.time() - start_time > TIMEOUT:
-            raise TimeoutError(
-                f"Timeout waiting for query result to be consistent on secondary")
-    print(f"Success: Query result consistent between primary and secondary!")
+    logger.info(f"Deleted data from primary, expr: {delete_expr}")

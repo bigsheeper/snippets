@@ -18,11 +18,30 @@ echo "MILVUS_VOLUME_DIRECTORY: ${MILVUS_VOLUME_DIRECTORY}"
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 [-f -a -c -s -k -r] [start_milvus|start_milvus_inf|stop_milvus|stop_milvus_inf]"
+    echo "Usage: $0 [OPTIONS] COMMAND"
+    echo ""
+    echo "OPTIONS:"
+    echo "  -f    Force stop"
+    echo "  -a    Enable ASAN (AddressSanitizer) debugging"
+    echo "  -c    Start Milvus in cluster mode"
+    echo "  -m    Start multiple Milvus clusters"
+    echo "  -s    Enable streaming service"
+    echo "  -k    Use Kafka as message queue (default: Pulsar)"
+    echo "  -r    Use RocksMQ as message queue (default: Pulsar)"
+    echo "  -u    Reuse the last volume directory instead of creating a new one"
+    echo ""
+    echo "COMMANDS:"
+    echo "  start_milvus        Start Milvus server (standalone or cluster mode)"
+    echo "  stop_milvus         Stop Milvus server"
+    echo "  start_milvus_inf    Start Milvus infrastructure (Pulsar/Kafka/RMQ + etcd + minio)"
+    echo "  stop_milvus_inf     Stop Milvus infrastructure"
+    echo "  start_milvus_full   Start both infrastructure and Milvus server"
+    echo "  stop_milvus_full    Stop both Milvus server and infrastructure"
+    echo ""
     exit 1
 }
 
-while getopts fmcsakr arg; do
+while getopts fmcsakru arg; do
     case $arg in
     f)
         FORCED=1
@@ -45,6 +64,9 @@ while getopts fmcsakr arg; do
     r)
         USE_RMQ=1
         ;;
+    u)
+        REUSE_LAST_VOLUME=1
+        ;;
     *)
         usage
         # Handle unrecognized flags here
@@ -53,6 +75,23 @@ while getopts fmcsakr arg; do
 done
 
 shift $(($OPTIND - 1))
+
+# Function to find the last milvus volume directory
+find_last_milvus_volume() {
+    if [[ -z "$MILVUS_VOLUME_DIRECTORY" || ! -d "$MILVUS_VOLUME_DIRECTORY" ]]; then
+        echo "MILVUS_VOLUME_DIRECTORY is not set or not a directory" >&2
+        return 1
+    fi
+
+    LAST_VOLUME=$(find "$MILVUS_VOLUME_DIRECTORY" -mindepth 1 -maxdepth 1 -type d ! -name '.' -printf '%T@ %p\n' | sort -k1,1nr | head -n 1 | cut -d' ' -f2-)
+    if [ -n "$LAST_VOLUME" ]; then
+        echo "${LAST_VOLUME}"
+        return 0
+    else
+        echo "No volume found" >&2
+        return 1
+    fi
+}
 
 function generate_new_volume_directory() {
     if [[ -z "${WORKSPACE_TAG}" ]]; then
@@ -64,10 +103,25 @@ function generate_new_volume_directory() {
     echo "NEW_VOLUME_DIRECTORY: ${NEW_VOLUME_DIRECTORY}"
 }
 
-function start_milvus_inf() {
+function setup_volume_directory() {
     if [[ -z "${NEW_VOLUME_DIRECTORY}" ]]; then
-        generate_new_volume_directory
+        if [[ -n "${REUSE_LAST_VOLUME}" ]]; then
+            echo "Reusing last volume directory..."
+            NEW_VOLUME_DIRECTORY=$(find_last_milvus_volume)
+            if [[ $? -ne 0 || -z "${NEW_VOLUME_DIRECTORY}" ]]; then
+                echo "Failed to find last volume directory, creating new one..."
+                generate_new_volume_directory
+            else
+                echo "Reusing volume directory: ${NEW_VOLUME_DIRECTORY}"
+            fi
+        else
+            generate_new_volume_directory
+        fi
     fi
+}
+
+function start_milvus_inf() {
+    setup_volume_directory
     DOCKER_COMPOSE_FILE="docker-compose-pulsar.yml"
     if [[ "${USE_KAFKA}" ]]; then
         echo "Use Kafka..."
@@ -98,9 +152,7 @@ function stop_milvus_inf() {
 }
 
 function start_milvus() {
-    if [[ -z "${NEW_VOLUME_DIRECTORY}" ]]; then
-        generate_new_volume_directory
-    fi
+    setup_volume_directory
     LOG_PATH="${NEW_VOLUME_DIRECTORY}/milvus-logs/"
     mkdir -p "${LOG_PATH}" || exit 1
 

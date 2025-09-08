@@ -1,4 +1,5 @@
 import time
+from loguru import logger
 from pymilvus import MilvusClient, DataType
 from pymilvus.client.types import LoadState
 from common import *
@@ -32,7 +33,7 @@ def create_collection_on_primary(collection_name):
         collection_name=collection_name,
         schema=schema,
     )
-    print(f"Collection created on primary, name: {collection_name}")
+    logger.info(f"Collection created on primary, name: {collection_name}")
 
 
 def create_collections_on_primary(collection_names):
@@ -42,7 +43,7 @@ def create_collections_on_primary(collection_names):
 
 def load_collection_on_primary(collection_name):
     primary_client.load_collection(collection_name)
-    print(f"Collection loaded on primary, name: {collection_name}")
+    logger.info(f"Collection loaded on primary, name: {collection_name}")
 
 
 def load_collections_on_primary(collection_names):
@@ -52,7 +53,7 @@ def load_collections_on_primary(collection_names):
 
 def release_collection_on_primary(collection_name):
     primary_client.release_collection(collection_name)
-    print(f"Collection released on primary, name: {collection_name}")
+    logger.info(f"Collection released on primary, name: {collection_name}")
 
 
 def release_collections_on_primary(collection_names):
@@ -62,7 +63,7 @@ def release_collections_on_primary(collection_names):
 
 def drop_collection_on_primary(collection_name):
     primary_client.drop_collection(collection_name)
-    print(f"Collection dropped on primary, name: {collection_name}")
+    logger.info(f"Collection dropped on primary, name: {collection_name}")
 
 
 def drop_collections_on_primary(collection_names):
@@ -85,10 +86,11 @@ def wait_for_secondary_create_collection(collection_name):
         if has_collection:
             break
         if time.time() - start_time > TIMEOUT:
-            raise TimeoutError(
-                f"Timeout waiting for collection to be created on secondary: {collection_name}")
+            error_msg = f"Timeout waiting for collection to be created on secondary: {collection_name}"
+            logger.error(error_msg)
+            raise TimeoutError(error_msg)
         time.sleep(1)
-    print(f"Collection created on secondary, name: {collection_name}")
+    logger.info(f"Collection created on secondary, name: {collection_name}")
 
 
 def wait_for_secondary_load_collection(collection_name):
@@ -99,10 +101,11 @@ def wait_for_secondary_load_collection(collection_name):
         if load_state['state'] == LoadState.Loaded:
             break
         if time.time() - start_time > TIMEOUT:
-            raise TimeoutError(
-                f"Timeout waiting for collection to be loaded on secondary: {collection_name}")
+            error_msg = f"Timeout waiting for collection to be loaded on secondary: {collection_name}"
+            logger.error(error_msg)
+            raise TimeoutError(error_msg)
         time.sleep(1)
-    print(f"Collection loaded on secondary, name: {collection_name}")
+    logger.info(f"Collection loaded on secondary, name: {collection_name}")
 
 
 def wait_for_secondary_release_collection(collection_name):
@@ -113,10 +116,11 @@ def wait_for_secondary_release_collection(collection_name):
         if load_state['state'] == LoadState.NotLoad:
             break
         if time.time() - start_time > TIMEOUT:
-            raise TimeoutError(
-                f"Timeout waiting for collection to be released on secondary: {collection_name}")
+            error_msg = f"Timeout waiting for collection to be released on secondary: {collection_name}"
+            logger.error(error_msg)
+            raise TimeoutError(error_msg)
         time.sleep(1)
-    print(f"Collection released on secondary, name: {collection_name}")
+    logger.info(f"Collection released on secondary, name: {collection_name}")
 
 
 def wait_for_secondary_drop_collection(collection_name):
@@ -126,10 +130,11 @@ def wait_for_secondary_drop_collection(collection_name):
         if not has_collection:
             break
         if time.time() - start_time > TIMEOUT:
-            raise TimeoutError(
-                f"Timeout waiting for collection to be dropped on secondary: {collection_name}")
+            error_msg = f"Timeout waiting for collection to be dropped on secondary: {collection_name}"
+            logger.error(error_msg)
+            raise TimeoutError(error_msg)
         time.sleep(1)
-    print(f"Collection dropped on secondary, name: {collection_name}")
+    logger.info(f"Collection dropped on secondary, name: {collection_name}")
 
 
 def wait_for_secondary_create_collections(collection_names):
