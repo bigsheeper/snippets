@@ -17,7 +17,7 @@ func main() {
 		sourceClusterID = `by-dev1`
 		targetClusterID = `by-dev2`
 
-		pchannelNum = 4
+		pchannelNum = 16
 	)
 
 	sourcePchannels := make([]string, 0, pchannelNum)
