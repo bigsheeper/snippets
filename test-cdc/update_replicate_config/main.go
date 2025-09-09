@@ -4,46 +4,70 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
+	"github.com/milvus-io/milvus-proto/go-api/v2/commonpb"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
 )
 
 func main() {
-	const (
-		sourceAddr = `http://172.18.50.5:19530`
-		targetAddr = `http://172.18.50.5:19531`
+	if len(os.Args) < 2 {
+		printUsage()
+		os.Exit(1)
+	}
 
-		sourceClusterID = `by-dev1`
-		targetClusterID = `by-dev2`
+	mode := os.Args[1]
+	if mode != "init" && mode != "switch" {
+		printUsage()
+		os.Exit(1)
+	}
+
+	const (
+		clusterAAddr = `http://172.18.50.5:19530`
+		clusterBAddr = `http://172.18.50.5:19531`
+
+		clusterAID = `by-dev1`
+		clusterBID = `by-dev2`
 
 		pchannelNum = 16
 	)
 
-	sourcePchannels := make([]string, 0, pchannelNum)
-	targetPchannels := make([]string, 0, pchannelNum)
+	clsuterAPchannels := make([]string, 0, pchannelNum)
+	clusterBPchannels := make([]string, 0, pchannelNum)
 	for i := 0; i < pchannelNum; i++ {
-		sourcePchannels = append(sourcePchannels, fmt.Sprintf("%s-rootcoord-dml_%d", sourceClusterID, i))
-		targetPchannels = append(targetPchannels, fmt.Sprintf("%s-rootcoord-dml_%d", targetClusterID, i))
+		clsuterAPchannels = append(clsuterAPchannels, fmt.Sprintf("%s-rootcoord-dml_%d", clusterAID, i))
+		clusterBPchannels = append(clusterBPchannels, fmt.Sprintf("%s-rootcoord-dml_%d", clusterBID, i))
 	}
 
 	// Use builder pattern to create cluster configuration (chained calls)
-	sourceCluster := milvusclient.NewMilvusClusterBuilder(sourceClusterID).
-		WithURI(sourceAddr).
-		WithPchannels(sourcePchannels...).
+	clusterA := milvusclient.NewMilvusClusterBuilder(clusterAID).
+		WithURI(clusterAAddr).
+		WithPchannels(clsuterAPchannels...).
 		Build()
 
-	targetCluster := milvusclient.NewMilvusClusterBuilder(targetClusterID).
-		WithURI(targetAddr).
-		WithPchannels(targetPchannels...).
+	clusterB := milvusclient.NewMilvusClusterBuilder(clusterBID).
+		WithURI(clusterBAddr).
+		WithPchannels(clusterBPchannels...).
 		Build()
 
 	// Use builder pattern to build replicate configuration
-	config := milvusclient.NewReplicateConfigurationBuilder().
-		WithCluster(sourceCluster).
-		WithCluster(targetCluster).
-		WithTopology(sourceClusterID, targetClusterID).
-		Build()
+	var config *commonpb.ReplicateConfiguration
+	if mode == "init" {
+		fmt.Println("Init replicate configuration: A -> B")
+		config = milvusclient.NewReplicateConfigurationBuilder().
+			WithCluster(clusterA).
+			WithCluster(clusterB).
+			WithTopology(clusterAID, clusterBID).
+			Build()
+	} else {
+		fmt.Println("Switch primary-standby: B -> A")
+		config = milvusclient.NewReplicateConfigurationBuilder().
+			WithCluster(clusterA).
+			WithCluster(clusterB).
+			WithTopology(clusterBID, clusterAID).
+			Build()
+	}
 
 	// Update replicate configuration
 	updateFn := func(addr string) {
@@ -65,6 +89,13 @@ func main() {
 		log.Println("Replicate source configuration updated successfully")
 	}
 
-	updateFn(sourceAddr)
-	updateFn(targetAddr)
+	updateFn(clusterAAddr)
+	updateFn(clusterBAddr)
+}
+
+func printUsage() {
+	fmt.Println("Usage:")
+	fmt.Println("  ./main init   - Init replicate configuration: A -> B")
+	fmt.Println("  ./main switch - Switch primary-standby: B -> A")
+	fmt.Println("")
 }

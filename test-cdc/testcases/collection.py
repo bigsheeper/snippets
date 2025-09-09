@@ -27,48 +27,48 @@ def create_collection_schema():
     return schema
 
 
-def create_collection_on_primary(collection_name):
+def create_collection_on_primary(collection_name, client):
     schema = create_collection_schema()
-    primary_client.create_collection(
+    client.create_collection(
         collection_name=collection_name,
         schema=schema,
     )
     logger.info(f"Collection created on primary, name: {collection_name}")
 
 
-def create_collections_on_primary(collection_names):
+def create_collections_on_primary(collection_names, client):
     for collection_name in collection_names:
-        create_collection_on_primary(collection_name)
+        create_collection_on_primary(collection_name, client)
 
 
-def load_collection_on_primary(collection_name):
-    primary_client.load_collection(collection_name)
+def load_collection_on_primary(collection_name, client):
+    client.load_collection(collection_name)
     logger.info(f"Collection loaded on primary, name: {collection_name}")
 
 
-def load_collections_on_primary(collection_names):
+def load_collections_on_primary(collection_names, client):
     for collection_name in collection_names:
-        load_collection_on_primary(collection_name)
+        load_collection_on_primary(collection_name, client)
 
 
-def release_collection_on_primary(collection_name):
-    primary_client.release_collection(collection_name)
+def release_collection_on_primary(collection_name, client):
+    client.release_collection(collection_name)
     logger.info(f"Collection released on primary, name: {collection_name}")
 
 
-def release_collections_on_primary(collection_names):
+def release_collections_on_primary(collection_names, client):
     for collection_name in collection_names:
-        release_collection_on_primary(collection_name)
+        release_collection_on_primary(collection_name, client)
 
 
-def drop_collection_on_primary(collection_name):
-    primary_client.drop_collection(collection_name)
+def drop_collection_on_primary(collection_name, client):
+    client.drop_collection(collection_name)
     logger.info(f"Collection dropped on primary, name: {collection_name}")
 
 
-def drop_collections_on_primary(collection_names):
+def drop_collections_on_primary(collection_names, client):
     for collection_name in collection_names:
-        drop_collection_on_primary(collection_name)
+        drop_collection_on_primary(collection_name, client)
 
 
 def get_collection_name(i, prefix=COLLECTION_NAME_PREFIX):
@@ -79,79 +79,79 @@ def get_collection_names(num_collections=NUM_COLLECTIONS, prefix=COLLECTION_NAME
     return [get_collection_name(i, prefix) for i in range(num_collections)]
 
 
-def wait_for_secondary_create_collection(collection_name):
+def wait_for_standby_create_collection(collection_name, client):
     start_time = time.time()
     while True:
-        has_collection = secondary_client.has_collection(collection_name)
+        has_collection = client.has_collection(collection_name)
         if has_collection:
             break
         if time.time() - start_time > TIMEOUT:
-            error_msg = f"Timeout waiting for collection to be created on secondary: {collection_name}"
+            error_msg = f"Timeout waiting for collection to be created on standby: {collection_name}"
             logger.error(error_msg)
             raise TimeoutError(error_msg)
         time.sleep(1)
-    logger.info(f"Collection created on secondary, name: {collection_name}")
+    logger.info(f"Collection created on standby, name: {collection_name}")
 
 
-def wait_for_secondary_load_collection(collection_name):
+def wait_for_standby_load_collection(collection_name, client):
     start_time = time.time()
     while True:
-        load_state = secondary_client.get_load_state(
+        load_state = client.get_load_state(
             collection_name=collection_name)
         if load_state['state'] == LoadState.Loaded:
             break
         if time.time() - start_time > TIMEOUT:
-            error_msg = f"Timeout waiting for collection to be loaded on secondary: {collection_name}"
+            error_msg = f"Timeout waiting for collection to be loaded on standby: {collection_name}"
             logger.error(error_msg)
             raise TimeoutError(error_msg)
         time.sleep(1)
-    logger.info(f"Collection loaded on secondary, name: {collection_name}")
+    logger.info(f"Collection loaded on standby, name: {collection_name}")
 
 
-def wait_for_secondary_release_collection(collection_name):
+def wait_for_standby_release_collection(collection_name, client):
     start_time = time.time()
     while True:
-        load_state = secondary_client.get_load_state(
+        load_state = client.get_load_state(
             collection_name=collection_name)
         if load_state['state'] == LoadState.NotLoad:
             break
         if time.time() - start_time > TIMEOUT:
-            error_msg = f"Timeout waiting for collection to be released on secondary: {collection_name}"
+            error_msg = f"Timeout waiting for collection to be released on standby: {collection_name}"
             logger.error(error_msg)
             raise TimeoutError(error_msg)
         time.sleep(1)
-    logger.info(f"Collection released on secondary, name: {collection_name}")
+    logger.info(f"Collection released on standby, name: {collection_name}")
 
 
-def wait_for_secondary_drop_collection(collection_name):
+def wait_for_standby_drop_collection(collection_name, client):
     start_time = time.time()
     while True:
-        has_collection = secondary_client.has_collection(collection_name)
+        has_collection = client.has_collection(collection_name)
         if not has_collection:
             break
         if time.time() - start_time > TIMEOUT:
-            error_msg = f"Timeout waiting for collection to be dropped on secondary: {collection_name}"
+            error_msg = f"Timeout waiting for collection to be dropped on standby: {collection_name}"
             logger.error(error_msg)
             raise TimeoutError(error_msg)
         time.sleep(1)
-    logger.info(f"Collection dropped on secondary, name: {collection_name}")
+    logger.info(f"Collection dropped on standby, name: {collection_name}")
 
 
-def wait_for_secondary_create_collections(collection_names):
+def wait_for_standby_create_collections(collection_names, client):
     for collection_name in collection_names:
-        wait_for_secondary_create_collection(collection_name)
+        wait_for_standby_create_collection(collection_name, client)
 
 
-def wait_for_secondary_load_collections(collection_names):
+def wait_for_standby_load_collections(collection_names, client):
     for collection_name in collection_names:
-        wait_for_secondary_load_collection(collection_name)
+        wait_for_standby_load_collection(collection_name, client)
 
 
-def wait_for_secondary_release_collections(collection_names):
+def wait_for_standby_release_collections(collection_names, client):
     for collection_name in collection_names:
-        wait_for_secondary_release_collection(collection_name)
+        wait_for_standby_release_collection(collection_name, client)
 
 
-def wait_for_secondary_drop_collections(collection_names):
+def wait_for_standby_drop_collections(collection_names, client):
     for collection_name in collection_names:
-        wait_for_secondary_drop_collection(collection_name)
+        wait_for_standby_drop_collection(collection_name, client)

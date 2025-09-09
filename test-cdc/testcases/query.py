@@ -3,9 +3,9 @@ from loguru import logger
 from common import *
 from collection import *
 
-def query_on_primary(collection_name, expected_count):
+def query_on_primary(collection_name, expected_count, client):
     query_expr = f"{PK_FIELD_NAME} >= 0"
-    res = primary_client.query(
+    res = client.query(
         collection_name=collection_name,
         consistency_level="Strong",
         filter=query_expr,
@@ -18,9 +18,9 @@ def query_on_primary(collection_name, expected_count):
     return res
 
 
-def query_on_primary_without_expected_count(collection_name):
+def query_on_primary_without_expected_count(collection_name, client):
     query_expr = f"{PK_FIELD_NAME} >= 0"
-    res = primary_client.query(
+    res = client.query(
         collection_name=collection_name,
         consistency_level="Strong",
         filter=query_expr,
@@ -29,9 +29,9 @@ def query_on_primary_without_expected_count(collection_name):
     return res
 
 
-def query_on_secondary(collection_name):
+def query_on_standby(collection_name, client):
     query_expr = f"{PK_FIELD_NAME} >= 0"
-    res = secondary_client.query(
+    res = client.query(
         collection_name=collection_name,
         consistency_level="Strong",
         filter=query_expr,
@@ -40,21 +40,21 @@ def query_on_secondary(collection_name):
     return res
 
 
-def wait_for_secondary_query(collection_name, res_on_primary):
+def wait_for_standby_query(collection_name, res_on_primary, client):
     start_time = time.time()
     while True:
-        res_on_secondary = query_on_secondary(collection_name)
-        if len(res_on_secondary) != len(res_on_primary):
+        res_on_standby = query_on_standby(collection_name, client)
+        if len(res_on_standby) != len(res_on_primary):
             logger.warning(
-                f"Length not match: primary={len(res_on_primary)}, secondary={len(res_on_secondary)}")
+                f"Length not match: primary={len(res_on_primary)}, standby={len(res_on_standby)}")
         else:
             ids_primary = sorted([item[PK_FIELD_NAME] for item in res_on_primary])
-            ids_secondary = sorted([item[PK_FIELD_NAME] for item in res_on_secondary])
-            if ids_primary == ids_secondary:
+            ids_standby = sorted([item[PK_FIELD_NAME] for item in res_on_standby])
+            if ids_primary == ids_standby:
                 break
         time.sleep(1)
         if time.time() - start_time > TIMEOUT:
-            error_msg = f"Timeout waiting for query result to be consistent on secondary"
+            error_msg = f"Timeout waiting for query result to be consistent on standby"
             logger.error(error_msg)
             raise TimeoutError(error_msg)
-    logger.info(f"Success: Query result consistent between primary and secondary!")
+    logger.info(f"Success: Query result consistent between primary and standby!")
