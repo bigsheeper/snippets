@@ -1,4 +1,5 @@
 import argparse
+from tracemalloc import start
 from loguru import logger
 from common import *
 from collection import *
@@ -6,8 +7,26 @@ from index import *
 from insert import *
 from query import *
 
+def get_max_id_from_collection(collection_name):
+    query_expr = f"{PK_FIELD_NAME} >= 0"
+    res = primary_client.query(
+        collection_name=collection_name,
+        consistency_level="Strong",
+        filter=query_expr,
+        output_fields=[PK_FIELD_NAME]
+    )
+    
+    if not res:
+        error_msg = f"Collection {collection_name} is empty or does not exist. Mode 2 requires an existing collection with data."
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    max_id = max(item[PK_FIELD_NAME] for item in res)
+    logger.info(f"Found max ID in collection {collection_name}: {max_id}")
+    return max_id
+
+
 def setup_collection_and_index(collection_name):
-    """Setup collection, index and load collection"""
     create_collection_on_primary(collection_name)
     wait_for_secondary_create_collection(collection_name)
 
@@ -17,19 +36,20 @@ def setup_collection_and_index(collection_name):
     load_collection_on_primary(collection_name)
     wait_for_secondary_load_collection(collection_name)
 
+
 def cleanup_collection(collection_name):
-    """Release and drop collection"""
     release_collection_on_primary(collection_name)
     wait_for_secondary_release_collection(collection_name)
 
     drop_collection_on_primary(collection_name)
     wait_for_secondary_drop_collection(collection_name)
 
-def insert_and_query_loop(collection_name, test_duration=600):
-    """Perform insert and query operations in a loop"""
-    total_count = 0
+
+def insert_and_query_loop(collection_name, test_duration=600, start_id=None):
     start_time = time.time()
-    start_id = 0
+    if start_id is None:
+        start_id = 0
+    total_count = start_id
     loop_count = 0
 
     while time.time() - start_time < test_duration:
@@ -59,6 +79,7 @@ def insert_and_query_loop(collection_name, test_duration=600):
     
     return total_count, loop_count
 
+
 def test_mode_1_full_cycle(test_duration=600):
     """Mode 1: Full cycle - setup + insert&query + cleanup"""
     collection_name = DEFAULT_COLLECTION_NAME
@@ -74,14 +95,21 @@ def test_mode_1_full_cycle(test_duration=600):
     # Cleanup
     cleanup_collection(collection_name)
 
+
 def test_mode_2_insert_query_only(test_duration=600):
     """Mode 2: Insert and query only (assumes collection already exists)"""
     collection_name = DEFAULT_COLLECTION_NAME
     
     logger.info("Mode: Insert and query only")
     
+    # Get the maximum ID from existing collection to avoid primary key conflicts
+    max_id = get_max_id_from_collection(collection_name)
+    start_id = max_id + 1
+    logger.info(f"Starting insert from ID: {start_id}")
+    
     # Only insert and query
-    insert_and_query_loop(collection_name, test_duration)
+    insert_and_query_loop(collection_name, test_duration, start_id)
+
 
 def test_mode_3_cleanup_only():
     """Mode 3: Cleanup only (drop and release)"""
@@ -91,6 +119,7 @@ def test_mode_3_cleanup_only():
     
     # Only cleanup
     cleanup_collection(collection_name)
+
 
 def test_continuously_insert(mode="full", test_duration=600):
     """Main test function with mode selection"""
