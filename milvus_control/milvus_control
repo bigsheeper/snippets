@@ -29,6 +29,8 @@ usage() {
     echo "  -k    Use Kafka as message queue (default: Pulsar)"
     echo "  -r    Use RocksMQ as message queue (default: Pulsar)"
     echo "  -u    Reuse the last volume directory instead of creating a new one"
+    echo "  --primary    Start/Stop only primary Milvus instance (by-dev1, port 19530)"
+    echo "  --standby    Start/Stop only standby Milvus instance (by-dev2, port 19531)"
     echo ""
     echo "COMMANDS:"
     echo "  start_milvus        Start Milvus server (standalone or cluster mode)"
@@ -41,40 +43,58 @@ usage() {
     exit 1
 }
 
-while getopts fmcsakru arg; do
-    case $arg in
-    f)
+# Handle all options including long options
+while [[ $# -gt 0 ]]; do
+    case $1 in
+    -f)
         FORCED=1
+        shift
         ;;
-    m)
+    -m)
         CLUSTERS=1
+        shift
         ;;
-    c)
+    -c)
         CLUSTER=1
+        shift
         ;;
-    s)
+    -s)
         STREAMING=1
+        shift
         ;;
-    a)
+    -a)
         ASAN_ENABLED=1
+        shift
         ;;
-    k)
+    -k)
         USE_KAFKA=1
+        shift
         ;;
-    r)
+    -r)
         USE_RMQ=1
+        shift
         ;;
-    u)
+    -u)
         REUSE_LAST_VOLUME=1
+        shift
+        ;;
+    --primary)
+        STOP_PRIMARY_ONLY=1
+        shift
+        ;;
+    --standby)
+        STOP_STANDBY_ONLY=1
+        shift
+        ;;
+    -*)
+        echo "Unknown option: $1"
+        usage
         ;;
     *)
-        usage
-        # Handle unrecognized flags here
+        break
         ;;
     esac
 done
-
-shift $(($OPTIND - 1))
 
 # Function to find the last milvus volume directory
 find_last_milvus_volume() {
@@ -152,6 +172,12 @@ function stop_milvus_inf() {
 }
 
 function start_milvus() {
+    # Check for conflicting options
+    if [[ -n "${STOP_PRIMARY_ONLY}" && -n "${STOP_STANDBY_ONLY}" ]]; then
+        echo "Error: Cannot specify both --primary and --standby options"
+        exit 1
+    fi
+    
     setup_volume_directory
     LOG_PATH="${NEW_VOLUME_DIRECTORY}/milvus-logs/"
     mkdir -p "${LOG_PATH}" || exit 1
@@ -189,9 +215,17 @@ function start_milvus() {
     # export
 
     if [[ -n "${CLUSTERS}" ]]; then
-        echo "Starting milvus clusters... Log@ ${LOG_PATH}"
-        msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev1 ETCD_ROOTPATH=by-dev1 MINIO_rootPath=by-dev1 PROXY_PORT=19530 METRICS_PORT=19091  ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone.stdout.log" 2>>"${LOG_PATH}/standalone.stderr.log" &
-        msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev2 ETCD_ROOTPATH=by-dev2 MINIO_rootPath=by-dev2 PROXY_PORT=19531 PROXY_INTERNAL_PORT=19528 ROOTCOORD_PORT=53101 METRICS_PORT=19092 ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone2.stdout.log" 2>>"${LOG_PATH}/standalone2.stderr.log" &
+        if [[ -n "${STOP_PRIMARY_ONLY}" ]]; then
+            echo "Starting primary milvus cluster (by-dev1)... Log@ ${LOG_PATH}"
+            msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev1 ETCD_ROOTPATH=by-dev1 MINIO_rootPath=by-dev1 PROXY_PORT=19530 METRICS_PORT=19091  ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone.stdout.log" 2>>"${LOG_PATH}/standalone.stderr.log" &
+        elif [[ -n "${STOP_STANDBY_ONLY}" ]]; then
+            echo "Starting standby milvus cluster (by-dev2)... Log@ ${LOG_PATH}"
+            msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev2 ETCD_ROOTPATH=by-dev2 MINIO_rootPath=by-dev2 PROXY_PORT=19531 PROXY_INTERNAL_PORT=19528 ROOTCOORD_PORT=53101 METRICS_PORT=19092 ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone2.stdout.log" 2>>"${LOG_PATH}/standalone2.stderr.log" &
+        else
+            echo "Starting milvus clusters... Log@ ${LOG_PATH}"
+            msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev1 ETCD_ROOTPATH=by-dev1 MINIO_rootPath=by-dev1 PROXY_PORT=19530 METRICS_PORT=19091  ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone.stdout.log" 2>>"${LOG_PATH}/standalone.stderr.log" &
+            msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev2 ETCD_ROOTPATH=by-dev2 MINIO_rootPath=by-dev2 PROXY_PORT=19531 PROXY_INTERNAL_PORT=19528 ROOTCOORD_PORT=53101 METRICS_PORT=19092 ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone2.stdout.log" 2>>"${LOG_PATH}/standalone2.stderr.log" &
+        fi
     elif [[ -z "${CLUSTER}" ]]; then
         echo "Starting milvus standalone... Log@ ${LOG_PATH}"
         METRICS_PORT=19091 ./bin/milvus run standalone 1>"${LOG_PATH}/standalone.stdout.log" 2>"${LOG_PATH}/standalone.stderr.log" &
@@ -217,12 +251,59 @@ function start_milvus() {
 }
 
 function stop_milvus() {
-    if [[ -z "${FORCED}" ]]; then
-        echo "Stopping Milvus server..."
-        killall milvus
+    # Check for conflicting options
+    if [[ -n "${STOP_PRIMARY_ONLY}" && -n "${STOP_STANDBY_ONLY}" ]]; then
+        echo "Error: Cannot specify both --primary and --standby options"
+        exit 1
+    fi
+    
+    # Function to find Milvus processes by port
+    find_milvus_by_port() {
+        local port=$1
+        lsof -ti:$port 2>/dev/null
+    }
+    
+    if [[ -n "${STOP_PRIMARY_ONLY}" ]]; then
+        echo "Stopping primary Milvus instance (by-dev1, port 19530)..."
+        primary_pids=$(find_milvus_by_port 19091)
+        echo "Primary Milvus instance PIDs: $primary_pids"
+        if [[ -n "$primary_pids" ]]; then
+            if [[ -z "${FORCED}" ]]; then
+                echo "Graceful stopping primary Milvus instance..."
+                kill $primary_pids 2>/dev/null
+            else
+                echo "Force stopping primary Milvus instance..."
+                kill -9 $primary_pids
+            fi
+            echo "Primary Milvus instance stopped"
+        else
+            echo "No primary Milvus instance found running on port 19530"
+        fi
+    elif [[ -n "${STOP_STANDBY_ONLY}" ]]; then
+        echo "Stopping standby Milvus instance (by-dev2, port 19531)..."
+        standby_pids=$(find_milvus_by_port 19092)
+        echo "Standby Milvus instance PIDs: $standby_pids"
+        if [[ -n "$standby_pids" ]]; then
+            if [[ -z "${FORCED}" ]]; then
+                echo "Graceful stopping standby Milvus instance..."
+                kill $standby_pids 2>/dev/null
+            else
+                echo "Force stopping standby Milvus instance..."
+                kill -9 $standby_pids
+            fi
+            echo "Standby Milvus instance stopped"
+        else
+            echo "No standby Milvus instance found running on port 19531"
+        fi
     else
-        echo "Force stopping Milvus server..."
-        killall -9 milvus
+        # Default behavior: stop all Milvus processes
+        if [[ -z "${FORCED}" ]]; then
+            echo "Stopping all Milvus servers..."
+            killall milvus
+        else
+            echo "Force stopping all Milvus servers..."
+            killall -9 milvus
+        fi
     fi
 }
 
