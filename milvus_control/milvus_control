@@ -185,11 +185,13 @@ function start_milvus() {
         export ROCKSMQ_PATH="${NEW_VOLUME_DIRECTORY}/rocksmq/rdb_data"
     fi
 
-    export
+    ## print the environment variables
+    # export
+
     if [[ -n "${CLUSTERS}" ]]; then
         echo "Starting milvus clusters... Log@ ${LOG_PATH}"
-        msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev1 ETCD_ROOTPATH=by-dev1 MINIO_rootPath=by-dev1 METRICS_PORT=19091  ./bin/milvus run standalone 1>"${LOG_PATH}/standalone.stdout.log" 2>"${LOG_PATH}/standalone.stderr.log" &
-        msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev2 ETCD_ROOTPATH=by-dev2 MINIO_rootPath=by-dev2 PROXY_PORT=19531 PROXY_INTERNAL_PORT=19528 ROOTCOORD_PORT=53101 METRICS_PORT=19092 ./bin/milvus run standalone 1>"${LOG_PATH}/standalone2.stdout.log" 2>"${LOG_PATH}/standalone2.stderr.log" &
+        msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev1 ETCD_ROOTPATH=by-dev1 MINIO_rootPath=by-dev1 PROXY_PORT=19530 METRICS_PORT=19091  ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone.stdout.log" 2>>"${LOG_PATH}/standalone.stderr.log" &
+        msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev2 ETCD_ROOTPATH=by-dev2 MINIO_rootPath=by-dev2 PROXY_PORT=19531 PROXY_INTERNAL_PORT=19528 ROOTCOORD_PORT=53101 METRICS_PORT=19092 ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone2.stdout.log" 2>>"${LOG_PATH}/standalone2.stderr.log" &
     elif [[ -z "${CLUSTER}" ]]; then
         echo "Starting milvus standalone... Log@ ${LOG_PATH}"
         METRICS_PORT=19091 ./bin/milvus run standalone 1>"${LOG_PATH}/standalone.stdout.log" 2>"${LOG_PATH}/standalone.stderr.log" &

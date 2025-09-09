@@ -18,6 +18,17 @@ def query_on_primary(collection_name, expected_count):
     return res
 
 
+def query_on_primary_without_expected_count(collection_name):
+    query_expr = f"{PK_FIELD_NAME} >= 0"
+    res = primary_client.query(
+        collection_name=collection_name,
+        consistency_level="Strong",
+        filter=query_expr,
+        output_fields=[PK_FIELD_NAME]
+    )
+    return res
+
+
 def query_on_secondary(collection_name):
     query_expr = f"{PK_FIELD_NAME} >= 0"
     res = secondary_client.query(
@@ -34,7 +45,7 @@ def wait_for_secondary_query(collection_name, res_on_primary):
     while True:
         res_on_secondary = query_on_secondary(collection_name)
         if len(res_on_secondary) != len(res_on_primary):
-            logger.info(
+            logger.warning(
                 f"Length not match: primary={len(res_on_primary)}, secondary={len(res_on_secondary)}")
         else:
             ids_primary = sorted([item[PK_FIELD_NAME] for item in res_on_primary])

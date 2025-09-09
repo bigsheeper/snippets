@@ -48,8 +48,9 @@ def insert_and_query_loop(collection_name, test_duration=600):
             delete_from_primary(collection_name, delete_expr)
             total_count -= INSERT_COUNT // 2
             logger.info(f"Random delete: deleted IDs from {delete_start_id} to {delete_end_id-1}")
-        
-        res_on_primary = query_on_primary(collection_name, total_count)
+
+        logger.info(f"Entities number on primary: {total_count}")
+        res_on_primary = query_on_primary_without_expected_count(collection_name)
         wait_for_secondary_query(collection_name, res_on_primary)
 
     logger.info(f"Total count: {total_count}")
