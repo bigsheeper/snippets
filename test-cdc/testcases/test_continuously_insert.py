@@ -94,7 +94,7 @@ def test_mode_1_full_cycle(test_duration=600):
     setup_collection_and_index(collection_name, primary_client, standby_client)
     
     # Insert and query
-    insert_and_query_loop(collection_name, test_duration, primary_client, standby_client)
+    insert_and_query_loop(collection_name, test_duration, None, primary_client, standby_client)
     
     # Cleanup
     cleanup_collection(collection_name, primary_client, standby_client)
@@ -133,6 +133,25 @@ def test_mode_3_cleanup_only():
     cleanup_collection(collection_name, primary_client, standby_client)
 
 
+def test_mode_4_insert_query_only_reversed(test_duration=600):
+    """Mode 4: Insert and query only with reversed roles (B->A)"""
+
+    primary_client = cluster_B_client  # B as primary
+    standby_client = cluster_A_client  # A as standby
+
+    collection_name = DEFAULT_COLLECTION_NAME
+    
+    logger.info("Mode: Insert and query only with reversed roles (B->A)")
+    
+    # Get the maximum ID from existing collection to avoid primary key conflicts
+    max_id = get_max_id_from_primary(collection_name, primary_client)
+    start_id = max_id + 1
+    logger.info(f"Starting insert from ID: {start_id}")
+    
+    # Only insert and query with reversed roles
+    insert_and_query_loop(collection_name, test_duration, start_id, primary_client, standby_client)
+
+
 def test_continuously_insert(mode="full", test_duration=600):
     """Main test function with mode selection"""
     if mode == "full":
@@ -141,14 +160,16 @@ def test_continuously_insert(mode="full", test_duration=600):
         test_mode_2_insert_query_only(test_duration)
     elif mode == "cleanup":
         test_mode_3_cleanup_only()
+    elif mode == "insert_reversed":
+        test_mode_4_insert_query_only_reversed(test_duration)
     else:
-        raise ValueError(f"Invalid mode: {mode}. Must be 'full', 'insert', or 'cleanup'.")
+        raise ValueError(f"Invalid mode: {mode}. Must be 'full', 'insert', 'cleanup', or 'insert_reversed'.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Test continuously insert with different modes')
-    parser.add_argument('--mode', type=str, choices=['full', 'insert', 'cleanup'], default='full',
-                        help='Test mode: full=complete cycle, insert=insert&query only, cleanup=cleanup only')
+    parser.add_argument('--mode', type=str, choices=['full', 'insert', 'cleanup', 'insert_reversed'], default='full',
+                        help='Test mode: full=complete cycle, insert=insert&query only (A->B), cleanup=cleanup only, insert_reversed=insert&query only (B->A)')
     parser.add_argument('--duration', type=int, default=600,
                         help='Test duration in seconds (default: 600)')
     
