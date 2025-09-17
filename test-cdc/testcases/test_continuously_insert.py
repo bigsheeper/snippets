@@ -17,7 +17,7 @@ def get_max_id_from_primary(collection_name, client):
     )
     
     if not res:
-        error_msg = f"Collection {collection_name} is empty or does not exist. Mode 2 requires an existing collection with data."
+        error_msg = f"Collection {collection_name} is empty or does not exist."
         logger.error(error_msg)
         raise ValueError(error_msg)
     
