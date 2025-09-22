@@ -59,6 +59,13 @@ def insert_and_query_loop(collection_name, test_duration=600, start_id=None, pri
         total_count += INSERT_COUNT
         loop_count += 1
         
+        # Upsert every 20 loops
+        if loop_count % 20 == 0:
+            # Upsert the current batch (update if exists, insert if not)
+            upsert_start_id = start_id - INSERT_COUNT
+            upsert_into_primary(upsert_start_id, collection_name, primary_client)
+            logger.info(f"Upsert: upserted IDs from {upsert_start_id} to {upsert_start_id + INSERT_COUNT - 1}")
+        
         # Random delete every 10 loops
         if loop_count % 10 == 0:
             # Delete first half of the current batch

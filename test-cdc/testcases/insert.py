@@ -38,3 +38,10 @@ def delete_from_primary(collection_name, delete_expr, client):
         filter=delete_expr
     )
     logger.info(f"Deleted data from primary, expr: {delete_expr}")
+
+
+def upsert_into_primary(start_id, collection_name, client):
+    data = generate_data(INSERT_COUNT, start_id=start_id, dim=DEFAULT_DIM)
+    client.upsert(collection_name, data)
+    logger.info(f"Upserted {INSERT_COUNT} data into primary, start_id: {start_id}")
+    return start_id + INSERT_COUNT

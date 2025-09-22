@@ -85,8 +85,12 @@ def main():
     }
 
     # Update both clusters
-    update_replicate_configuration(clusterA_addr, config)
-    update_replicate_configuration(clusterB_addr, config)
+    if source_cluster_id == clusterB_id:
+        update_replicate_configuration(clusterA_addr, config)
+        update_replicate_configuration(clusterB_addr, config)
+    else:
+        update_replicate_configuration(clusterB_addr, config)
+        update_replicate_configuration(clusterA_addr, config)
 
 
 if __name__ == "__main__":
