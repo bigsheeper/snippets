@@ -5,8 +5,9 @@ from pymilvus import (
 )
 
 fmt = "\n=== {:30} ===\n"
-dim = 1024
-num_entities = 1500
+dim = 128
+num_entities = 10000
+batch = 100
 collection_name = "hello_milvus"
 milvus_client = MilvusClient("http://localhost:19530")
 
@@ -18,9 +19,6 @@ milvus_client.create_collection(collection_name, dim, consistency_level="Strong"
 print(fmt.format("    all collections    "))
 print(milvus_client.list_collections())
 
-print(fmt.format(f"schema of collection {collection_name}"))
-print(milvus_client.describe_collection(collection_name))
-
 rng = np.random.default_rng(seed=19530)
 rows = []
 for i in range(num_entities):
@@ -30,14 +28,9 @@ for i in range(num_entities):
         "a": (i + 1) * 100
     })
 
-for i in range(10):
-    print(fmt.format("Start inserting entities"))
+for i in range(batch):
     start_time = time.time()
     insert_result = milvus_client.insert(collection_name, rows, progress_bar=True)
     end_time = time.time()
     latency_ms = (end_time - start_time) * 1000
-    print(fmt.format(f"Inserting entities done, latency: {latency_ms:.2f} ms"))
-
-milvus_client.load_collection(collection_name)
-
-# milvus_client.drop_collection(collection_name)
+    print(fmt.format(f"Round {i+1}, Inserting entities done, latency: {latency_ms:.2f} ms"))

@@ -1,0 +1,14 @@
+apiVersion: milvus.io/v1beta1
+kind: Milvus
+metadata:
+  name: cdc-standalone
+  namespace: qa-milvus
+  labels:
+    app: cdc-standalone
+spec:
+  mode: standalone
+  components:
+    image: harbor.milvus.io/milvus/milvus:bigsheeper-enhance_DDL_CDC_final_standalone-668487f-20250928
+    version: v2.6.2
+    cdc:
+      replicas: 1

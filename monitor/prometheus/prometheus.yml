@@ -17,6 +17,15 @@ scrape_configs:
           container: standalone
           pod: standalone
           service: standalone
+      - targets: ["host.docker.internal:29091"]
+        labels:
+          namespace: milvus
+          app_kubernetes_io_instance: standalone
+          app_kubernetes_io_name: milvus
+          component: cdc
+          container: cdc
+          pod: cdc
+          service: cdc
   - job_name: cluster
     static_configs:
       - targets: ["host.docker.internal:19092"]
@@ -73,6 +82,15 @@ scrape_configs:
           container: streamingnode
           pod: streamingnode
           service: streamingnode
+      - targets: ["host.docker.internal:29092"]
+        labels:
+          namespace: milvus
+          app_kubernetes_io_instance: cluster
+          app_kubernetes_io_name: milvus
+          component: cdc
+          container: cdc
+          pod: cdc
+          service: cdc
   - job_name: logstore
     static_configs:
       - targets:

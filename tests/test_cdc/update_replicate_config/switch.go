@@ -11,7 +11,7 @@ import (
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
 )
 
-func main() {
+func testSwitchover() {
 	if len(os.Args) < 2 {
 		printUsage()
 		os.Exit(1)

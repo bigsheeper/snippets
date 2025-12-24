@@ -3,14 +3,14 @@ version: '3.5'
 services:
   prometheus:
     container_name: prometheus
-    image: bitnami/prometheus:latest
+    image: prom/prometheus:latest
     restart: always
     user: "1000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ${MONITOR_VOLUME_DIRECTORY:-.}/prometheus/prometheus.yml:/opt/bitnami/prometheus/conf/prometheus.yml
-      - ${MONITOR_VOLUME_DIRECTORY:-.}/prometheus/data:/opt/bitnami/prometheus/data
+      - ${MONITOR_VOLUME_DIRECTORY:-.}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ${MONITOR_VOLUME_DIRECTORY:-.}/prometheus/data:/prometheus
     ports:
       - "9090:9090"
 
