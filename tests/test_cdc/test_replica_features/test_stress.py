@@ -102,19 +102,14 @@ def run_stress_test(max_cycles=1000, max_duration_sec=None):
                     f"[Cycle {cycle}] Primary replica mismatch: expected={primary_replica_num}, "
                     f"actual={primary_replicas}"
                 )
+                fail_count += 1
 
             # Standby should use its own local config (not necessarily match primary)
-            if standby_replicas == primary_replica_num:
+            if standby_replicas != 1:
                 logger.info(
-                    f"[Cycle {cycle}] Standby replica matches primary ({standby_replicas}) "
-                    f"— local config may not be set or matches by coincidence"
+                    f"[Cycle {cycle}] Standby replica should be 1, but got {standby_replicas}, primary_replica_num={primary_replica_num}"
                 )
-            else:
-                logger.info(
-                    f"[Cycle {cycle}] Standby replica differs from primary "
-                    f"(standby={standby_replicas}, primary={primary_replica_num}) "
-                    f"— local config override working"
-                )
+                fail_count += 1
 
             # Cleanup
             cleanup_collection(collection_name, primary_client, standby_client)

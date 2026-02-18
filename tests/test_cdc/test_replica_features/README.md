@@ -28,7 +28,7 @@ Each cluster runs: mixcoord, proxy, datanode, indexnode, 3 streaming nodes, 3 qu
 
 ```bash
 # 1. Start infrastructure + clusters
-MILVUS_STREAMING_SERVICE_ENABLED=1 QUERYCOORD_CLUSTERLEVELLOADREPLICANUMBER=2 \
+MILVUS_STREAMING_SERVICE_ENABLED=1 \
   ~/workspace/snippets/milvus_control/milvus_control -m -c -s start_milvus_full
 
 # 2. Wait for clusters to be ready
@@ -94,7 +94,7 @@ MILVUS_CONTROL=~/workspace/snippets/milvus_control/milvus_control
 $MILVUS_CONTROL start_milvus_inf
 
 # Start clusters (reuse existing volume)
-MILVUS_STREAMING_SERVICE_ENABLED=1 QUERYCOORD_CLUSTERLEVELLOADREPLICANUMBER=2 \
+MILVUS_STREAMING_SERVICE_ENABLED=1 \
   $MILVUS_CONTROL -m -c -s -u start_milvus
 
 # Stop clusters only
