@@ -215,20 +215,57 @@ function start_milvus() {
     # export
 
     if [[ -n "${CLUSTERS}" ]]; then
-        if [[ -n "${STOP_PRIMARY_ONLY}" ]]; then
-            echo "Starting primary milvus cluster (by-dev1)... Log@ ${LOG_PATH}"
-            msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev1 ETCD_ROOTPATH=by-dev1 MINIO_rootPath=by-dev1 PROXY_PORT=19530 METRICS_PORT=19091  ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone.stdout.log" 2>>"${LOG_PATH}/standalone.stderr.log" &
-            msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev1 ETCD_ROOTPATH=by-dev1 MINIO_rootPath=by-dev1 PROXY_PORT=19530 METRICS_PORT=29091  ./bin/milvus run cdc > "${LOG_PATH}/standalone.cdc.stdout.log" 2>&1 &
-        elif [[ -n "${STOP_STANDBY_ONLY}" ]]; then
-            echo "Starting standby milvus cluster (by-dev2)... Log@ ${LOG_PATH}"
-            msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev2 ETCD_ROOTPATH=by-dev2 MINIO_rootPath=by-dev2 PROXY_PORT=19531 PROXY_INTERNAL_PORT=19528 ROOTCOORD_PORT=53101 METRICS_PORT=19092 ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone2.stdout.log" 2>>"${LOG_PATH}/standalone2.stderr.log" &
-            msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev2 ETCD_ROOTPATH=by-dev2 MINIO_rootPath=by-dev2 PROXY_PORT=19531 PROXY_INTERNAL_PORT=19528 ROOTCOORD_PORT=53101 METRICS_PORT=29092 ./bin/milvus run cdc > "${LOG_PATH}/standalone2.cdc.stdout.log" 2>&1 &
+        if [[ -n "${CLUSTER}" && -n "${STREAMING}" ]]; then
+            # Multi-cluster + cluster mode + streaming: each cluster gets mixcoord, proxy, datanode, indexnode, 3 streaming nodes, cdc
+            function start_cluster_streaming() {
+                local prefix=$1 proxy_port=$2 internal_port=$3 rootcoord_port=$4 metrics_base=$5 log_prefix=$6
+                local env_base="msgChannel_CHANNAMEPREFIX_CLUSTER=${prefix} ETCD_ROOTPATH=${prefix} MINIO_rootPath=${prefix}"
+                local extra_env=""
+                if [[ -n "${internal_port}" ]]; then
+                    extra_env="PROXY_INTERNAL_PORT=${internal_port} ROOTCOORD_PORT=${rootcoord_port}"
+                fi
+
+                env ${env_base} ${extra_env} METRICS_PORT=$((metrics_base))     ./bin/milvus run mixture -rootcoord -querycoord -datacoord -indexcoord 1>>"${LOG_PATH}/${log_prefix}-mixcoord.stdout.log" 2>>"${LOG_PATH}/${log_prefix}-mixcoord.stderr.log" &
+                env ${env_base} ${extra_env} PROXY_PORT=${proxy_port} METRICS_PORT=$((metrics_base+1)) ./bin/milvus run proxy 1>>"${LOG_PATH}/${log_prefix}-proxy.stdout.log" 2>>"${LOG_PATH}/${log_prefix}-proxy.stderr.log" &
+                env ${env_base} ${extra_env} METRICS_PORT=$((metrics_base+2)) ./bin/milvus run datanode  1>>"${LOG_PATH}/${log_prefix}-datanode.stdout.log"  2>>"${LOG_PATH}/${log_prefix}-datanode.stderr.log" &
+                env ${env_base} ${extra_env} METRICS_PORT=$((metrics_base+3)) ./bin/milvus run indexnode 1>>"${LOG_PATH}/${log_prefix}-indexnode.stdout.log" 2>>"${LOG_PATH}/${log_prefix}-indexnode.stderr.log" &
+                env ${env_base} ${extra_env} METRICS_PORT=$((metrics_base+4)) LOCALSTORAGE_PATH="${NEW_VOLUME_DIRECTORY}/${log_prefix}-sn1/data/" ./bin/milvus run streamingnode 1>>"${LOG_PATH}/${log_prefix}-sn1.stdout.log" 2>>"${LOG_PATH}/${log_prefix}-sn1.stderr.log" &
+                env ${env_base} ${extra_env} METRICS_PORT=$((metrics_base+5)) LOCALSTORAGE_PATH="${NEW_VOLUME_DIRECTORY}/${log_prefix}-sn2/data/" ./bin/milvus run streamingnode 1>>"${LOG_PATH}/${log_prefix}-sn2.stdout.log" 2>>"${LOG_PATH}/${log_prefix}-sn2.stderr.log" &
+                env ${env_base} ${extra_env} METRICS_PORT=$((metrics_base+6)) LOCALSTORAGE_PATH="${NEW_VOLUME_DIRECTORY}/${log_prefix}-sn3/data/" ./bin/milvus run streamingnode 1>>"${LOG_PATH}/${log_prefix}-sn3.stdout.log" 2>>"${LOG_PATH}/${log_prefix}-sn3.stderr.log" &
+                env ${env_base} ${extra_env} METRICS_PORT=$((metrics_base+7)) LOCALSTORAGE_PATH="${NEW_VOLUME_DIRECTORY}/${log_prefix}-qn1/data/" ./bin/milvus run querynode 1>>"${LOG_PATH}/${log_prefix}-qn1.stdout.log" 2>>"${LOG_PATH}/${log_prefix}-qn1.stderr.log" &
+                env ${env_base} ${extra_env} METRICS_PORT=$((metrics_base+8)) LOCALSTORAGE_PATH="${NEW_VOLUME_DIRECTORY}/${log_prefix}-qn2/data/" ./bin/milvus run querynode 1>>"${LOG_PATH}/${log_prefix}-qn2.stdout.log" 2>>"${LOG_PATH}/${log_prefix}-qn2.stderr.log" &
+                env ${env_base} ${extra_env} METRICS_PORT=$((metrics_base+9)) LOCALSTORAGE_PATH="${NEW_VOLUME_DIRECTORY}/${log_prefix}-qn3/data/" ./bin/milvus run querynode 1>>"${LOG_PATH}/${log_prefix}-qn3.stdout.log" 2>>"${LOG_PATH}/${log_prefix}-qn3.stderr.log" &
+                env ${env_base} ${extra_env} PROXY_PORT=${proxy_port} METRICS_PORT=$((metrics_base+50)) ./bin/milvus run cdc > "${LOG_PATH}/${log_prefix}-cdc.stdout.log" 2>&1 &
+            }
+
+            if [[ -n "${STOP_PRIMARY_ONLY}" ]]; then
+                echo "Starting primary cluster (by-dev1, cluster+streaming)... Log@ ${LOG_PATH}"
+                start_cluster_streaming by-dev1 19530 "" "" 19100 a
+            elif [[ -n "${STOP_STANDBY_ONLY}" ]]; then
+                echo "Starting standby cluster (by-dev2, cluster+streaming)... Log@ ${LOG_PATH}"
+                start_cluster_streaming by-dev2 19531 19528 53101 19200 b
+            else
+                echo "Starting milvus clusters (cluster+streaming)... Log@ ${LOG_PATH}"
+                start_cluster_streaming by-dev1 19530 "" "" 19100 a
+                start_cluster_streaming by-dev2 19531 19528 53101 19200 b
+            fi
         else
-            echo "Starting milvus clusters... Log@ ${LOG_PATH}"
-            msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev1 ETCD_ROOTPATH=by-dev1 MINIO_rootPath=by-dev1 PROXY_PORT=19530 METRICS_PORT=19091  ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone.stdout.log" 2>>"${LOG_PATH}/standalone.stderr.log" &
-            msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev1 ETCD_ROOTPATH=by-dev1 MINIO_rootPath=by-dev1 PROXY_PORT=19530 METRICS_PORT=29091  ./bin/milvus run cdc > "${LOG_PATH}/standalone.cdc.stdout.log" 2>&1 &
-            msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev2 ETCD_ROOTPATH=by-dev2 MINIO_rootPath=by-dev2 PROXY_PORT=19531 PROXY_INTERNAL_PORT=19528 ROOTCOORD_PORT=53101 METRICS_PORT=19092 ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone2.stdout.log" 2>>"${LOG_PATH}/standalone2.stderr.log" &
-            msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev2 ETCD_ROOTPATH=by-dev2 MINIO_rootPath=by-dev2 PROXY_PORT=19531 PROXY_INTERNAL_PORT=19528 ROOTCOORD_PORT=53101 METRICS_PORT=29092 ./bin/milvus run cdc > "${LOG_PATH}/standalone2.cdc.stdout.log" 2>&1 &
+            # Multi-cluster standalone mode (original behavior)
+            if [[ -n "${STOP_PRIMARY_ONLY}" ]]; then
+                echo "Starting primary milvus cluster (by-dev1)... Log@ ${LOG_PATH}"
+                msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev1 ETCD_ROOTPATH=by-dev1 MINIO_rootPath=by-dev1 PROXY_PORT=19530 METRICS_PORT=19091  ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone.stdout.log" 2>>"${LOG_PATH}/standalone.stderr.log" &
+                msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev1 ETCD_ROOTPATH=by-dev1 MINIO_rootPath=by-dev1 PROXY_PORT=19530 METRICS_PORT=29091  ./bin/milvus run cdc > "${LOG_PATH}/standalone.cdc.stdout.log" 2>&1 &
+            elif [[ -n "${STOP_STANDBY_ONLY}" ]]; then
+                echo "Starting standby milvus cluster (by-dev2)... Log@ ${LOG_PATH}"
+                msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev2 ETCD_ROOTPATH=by-dev2 MINIO_rootPath=by-dev2 PROXY_PORT=19531 PROXY_INTERNAL_PORT=19528 ROOTCOORD_PORT=53101 METRICS_PORT=19092 ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone2.stdout.log" 2>>"${LOG_PATH}/standalone2.stderr.log" &
+                msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev2 ETCD_ROOTPATH=by-dev2 MINIO_rootPath=by-dev2 PROXY_PORT=19531 PROXY_INTERNAL_PORT=19528 ROOTCOORD_PORT=53101 METRICS_PORT=29092 ./bin/milvus run cdc > "${LOG_PATH}/standalone2.cdc.stdout.log" 2>&1 &
+            else
+                echo "Starting milvus clusters... Log@ ${LOG_PATH}"
+                msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev1 ETCD_ROOTPATH=by-dev1 MINIO_rootPath=by-dev1 PROXY_PORT=19530 METRICS_PORT=19091  ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone.stdout.log" 2>>"${LOG_PATH}/standalone.stderr.log" &
+                msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev1 ETCD_ROOTPATH=by-dev1 MINIO_rootPath=by-dev1 PROXY_PORT=19530 METRICS_PORT=29091  ./bin/milvus run cdc > "${LOG_PATH}/standalone.cdc.stdout.log" 2>&1 &
+                msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev2 ETCD_ROOTPATH=by-dev2 MINIO_rootPath=by-dev2 PROXY_PORT=19531 PROXY_INTERNAL_PORT=19528 ROOTCOORD_PORT=53101 METRICS_PORT=19092 ./bin/milvus run standalone 1>>"${LOG_PATH}/standalone2.stdout.log" 2>>"${LOG_PATH}/standalone2.stderr.log" &
+                msgChannel_CHANNAMEPREFIX_CLUSTER=by-dev2 ETCD_ROOTPATH=by-dev2 MINIO_rootPath=by-dev2 PROXY_PORT=19531 PROXY_INTERNAL_PORT=19528 ROOTCOORD_PORT=53101 METRICS_PORT=29092 ./bin/milvus run cdc > "${LOG_PATH}/standalone2.cdc.stdout.log" 2>&1 &
+            fi
         fi
     elif [[ -z "${CLUSTER}" ]]; then
         echo "Starting milvus standalone... Log@ ${LOG_PATH}"
@@ -261,53 +298,52 @@ function stop_milvus() {
         echo "Error: Cannot specify both --primary and --standby options"
         exit 1
     fi
-    
-    # Function to find Milvus processes by port
-    find_milvus_by_port() {
-        local port=$1
-        lsof -ti:$port 2>/dev/null
+
+    # Find all milvus PIDs belonging to a cluster by ETCD_ROOTPATH env var
+    find_cluster_pids() {
+        local etcd_root=$1
+        local pids=""
+        for pid in $(pgrep -x milvus 2>/dev/null); do
+            if tr '\0' '\n' < /proc/$pid/environ 2>/dev/null | grep -q "ETCD_ROOTPATH=$etcd_root"; then
+                pids="$pids $pid"
+            fi
+        done
+        echo $pids
     }
-    
+
+    kill_pids() {
+        local pids="$1"
+        local label="$2"
+        if [[ -n "$pids" ]]; then
+            if [[ -z "${FORCED}" ]]; then
+                echo "Graceful stopping ${label}..."
+                kill $pids 2>/dev/null
+            else
+                echo "Force stopping ${label}..."
+                kill -9 $pids 2>/dev/null
+            fi
+            echo "${label} stopped (PIDs:$pids)"
+        else
+            echo "No ${label} processes found"
+        fi
+    }
+
     if [[ -n "${STOP_PRIMARY_ONLY}" ]]; then
-        echo "Stopping primary Milvus instance (by-dev1, port 19530)..."
-        primary_pids=$(find_milvus_by_port 19091)
-        echo "Primary Milvus instance PIDs: $primary_pids"
-        if [[ -n "$primary_pids" ]]; then
-            if [[ -z "${FORCED}" ]]; then
-                echo "Graceful stopping primary Milvus instance..."
-                kill $primary_pids 2>/dev/null
-            else
-                echo "Force stopping primary Milvus instance..."
-                kill -9 $primary_pids
-            fi
-            echo "Primary Milvus instance stopped"
-        else
-            echo "No primary Milvus instance found running on port 19530"
-        fi
+        echo "Stopping primary Milvus instance (by-dev1)..."
+        pids=$(find_cluster_pids "by-dev1")
+        kill_pids "$pids" "primary cluster (by-dev1)"
     elif [[ -n "${STOP_STANDBY_ONLY}" ]]; then
-        echo "Stopping standby Milvus instance (by-dev2, port 19531)..."
-        standby_pids=$(find_milvus_by_port 19092)
-        echo "Standby Milvus instance PIDs: $standby_pids"
-        if [[ -n "$standby_pids" ]]; then
-            if [[ -z "${FORCED}" ]]; then
-                echo "Graceful stopping standby Milvus instance..."
-                kill $standby_pids 2>/dev/null
-            else
-                echo "Force stopping standby Milvus instance..."
-                kill -9 $standby_pids
-            fi
-            echo "Standby Milvus instance stopped"
-        else
-            echo "No standby Milvus instance found running on port 19531"
-        fi
+        echo "Stopping standby Milvus instance (by-dev2)..."
+        pids=$(find_cluster_pids "by-dev2")
+        kill_pids "$pids" "standby cluster (by-dev2)"
     else
         # Default behavior: stop all Milvus processes
         if [[ -z "${FORCED}" ]]; then
             echo "Stopping all Milvus servers..."
-            killall milvus
+            killall milvus 2>/dev/null
         else
             echo "Force stopping all Milvus servers..."
-            killall -9 milvus
+            killall -9 milvus 2>/dev/null
         fi
     fi
 }

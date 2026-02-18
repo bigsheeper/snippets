@@ -15,6 +15,22 @@ cluster_A_client = MilvusClient(uri=CLUSTER_A_ADDR, token=TOKEN)
 cluster_B_client = MilvusClient(uri=CLUSTER_B_ADDR, token=TOKEN)
 
 
+def reconnect_clients():
+    """Reconnect both clients after cluster restart (gRPC connections go stale)."""
+    global cluster_A_client, cluster_B_client
+    try:
+        cluster_A_client.close()
+    except Exception:
+        pass
+    try:
+        cluster_B_client.close()
+    except Exception:
+        pass
+    cluster_A_client = MilvusClient(uri=CLUSTER_A_ADDR, token=TOKEN)
+    cluster_B_client = MilvusClient(uri=CLUSTER_B_ADDR, token=TOKEN)
+    logger.info("Reconnected both clients")
+
+
 def generate_pchannels(cluster_id: str, pchannel_num: int):
     return [f"{cluster_id}-rootcoord-dml_{i}" for i in range(pchannel_num)]
 

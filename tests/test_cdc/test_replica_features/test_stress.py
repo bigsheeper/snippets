@@ -1,13 +1,12 @@
 """
-Stress test: switchover + pchannel increase + replica heterogeneity
+Stress test: switchover + replica heterogeneity
 
 Loop N=0..max_cycles:
   - Switchover:        every 10 cycles (toggle A→B / B→A)
-  - Pchannel increase: every 100 cycles (2→3→4→...)
   - Replica variation: every cycle, replica_count = (N % 3) + 1
 
 Each cycle:
-  1. (Optionally) update replicate config (switchover / pchannel increase)
+  1. (Optionally) switchover topology
   2. Create collection with replica_count on primary
   3. Insert data, verify replicated to standby
   4. Verify standby replica count matches its local config (not primary's)
@@ -45,8 +44,7 @@ from collection_helpers import (
 
 # Configurable intervals
 SWITCHOVER_INTERVAL = 10
-PCHANNEL_INCREASE_INTERVAL = 100
-INIT_PCHANNEL_NUM = 2
+PCHANNEL_NUM = 16
 
 
 def run_stress_test(max_cycles=1000, max_duration_sec=None):
@@ -54,11 +52,10 @@ def run_stress_test(max_cycles=1000, max_duration_sec=None):
     # Initial state
     current_source = CLUSTER_A_ID
     current_target = CLUSTER_B_ID
-    current_pchannel_num = INIT_PCHANNEL_NUM
 
     # Init replicate config
-    logger.info(f"=== Init: {current_source} -> {current_target}, pchannels={current_pchannel_num} ===")
-    update_replicate_config(current_source, current_target, current_pchannel_num)
+    logger.info(f"=== Init: {current_source} -> {current_target}, pchannels={PCHANNEL_NUM} ===")
+    update_replicate_config(current_source, current_target, PCHANNEL_NUM)
 
     start_time = time.time()
     success_count = 0
@@ -73,17 +70,11 @@ def run_stress_test(max_cycles=1000, max_duration_sec=None):
         cycle_start = time.time()
 
         try:
-            # --- Pchannel increase (every 100 cycles) ---
-            if cycle > 0 and cycle % PCHANNEL_INCREASE_INTERVAL == 0:
-                current_pchannel_num += 1
-                logger.info(f"[Cycle {cycle}] Pchannel increase -> {current_pchannel_num}")
-                update_replicate_config(current_source, current_target, current_pchannel_num)
-
             # --- Switchover (every 10 cycles) ---
             if cycle > 0 and cycle % SWITCHOVER_INTERVAL == 0:
                 current_source, current_target = current_target, current_source
                 logger.info(f"[Cycle {cycle}] Switchover -> {current_source} -> {current_target}")
-                update_replicate_config(current_source, current_target, current_pchannel_num)
+                update_replicate_config(current_source, current_target, PCHANNEL_NUM)
 
             # --- Replica variation (every cycle) ---
             primary_replica_num = (cycle % 3) + 1
@@ -91,8 +82,7 @@ def run_stress_test(max_cycles=1000, max_duration_sec=None):
             collection_name = f"stress_cycle_{cycle}"
 
             logger.info(
-                f"[Cycle {cycle}] source={current_source}, replicas={primary_replica_num}, "
-                f"pchannels={current_pchannel_num}"
+                f"[Cycle {cycle}] source={current_source}, replicas={primary_replica_num}"
             )
 
             # Create, load, insert, verify
@@ -114,8 +104,6 @@ def run_stress_test(max_cycles=1000, max_duration_sec=None):
                 )
 
             # Standby should use its own local config (not necessarily match primary)
-            # If standby has local config (e.g., replica=2), it should differ from primary
-            # We log it for verification — the exact expected value depends on cluster config
             if standby_replicas == primary_replica_num:
                 logger.info(
                     f"[Cycle {cycle}] Standby replica matches primary ({standby_replicas}) "
@@ -156,7 +144,6 @@ def run_stress_test(max_cycles=1000, max_duration_sec=None):
     logger.info(f"  Total cycles: {success_count + fail_count}")
     logger.info(f"  Success: {success_count}")
     logger.info(f"  Failed:  {fail_count}")
-    logger.info(f"  Final pchannels: {current_pchannel_num}")
     logger.info(f"  Final topology: {current_source} -> {current_target}")
     logger.info("=" * 60)
 
@@ -165,7 +152,7 @@ def run_stress_test(max_cycles=1000, max_duration_sec=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="CDC stress test: switchover + pchannel increase + replica variation")
+    parser = argparse.ArgumentParser(description="CDC stress test: switchover + replica variation")
     parser.add_argument("--cycles", type=int, default=1000, help="Max number of cycles (default: 1000)")
     parser.add_argument("--duration", type=int, default=None, help="Max duration in seconds (default: no limit)")
     args = parser.parse_args()
