@@ -1,4 +1,5 @@
 import time
+from concurrent.futures import ThreadPoolExecutor
 from loguru import logger
 from pymilvus import MilvusClient
 
@@ -71,16 +72,19 @@ def build_replicate_config(source_id, target_id, pchannel_num):
 def update_replicate_config(source_id, target_id, pchannel_num):
     """Update replicate config on both clusters."""
     config = build_replicate_config(source_id, target_id, pchannel_num)
-
-    # Update standby first, then primary
-    if source_id == CLUSTER_A_ID:
-        cluster_B_client.update_replicate_configuration(**config)
-        cluster_A_client.update_replicate_configuration(**config)
-    else:
-        cluster_A_client.update_replicate_configuration(**config)
-        cluster_B_client.update_replicate_configuration(**config)
-
-    logger.info(f"Replicate config updated: {source_id} -> {target_id}, pchannels={pchannel_num}")
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_a = executor.submit(cluster_A_client.update_replicate_configuration, **config)
+        future_b = executor.submit(cluster_B_client.update_replicate_configuration, **config)
+        future_a.result()
+        logger.info(
+            f"Replicate config updated to A: {source_id} -> {target_id}, "
+            f"pchannels={pchannel_num}"
+        )
+        future_b.result()
+        logger.info(
+            f"Replicate config updated to B: {source_id} -> {target_id}, "
+            f"pchannels={pchannel_num}"
+        )
 
 
 def get_primary_and_standby(source_id):
