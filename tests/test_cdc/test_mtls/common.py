@@ -1,9 +1,16 @@
 """
 Common constants and utilities for CDC mTLS E2E tests.
 
-All 3 clusters run with tlsMode=2 (mTLS). PyMilvus test clients use one-way TLS
-(CA verification only) since they are not CDC — CDC handles mTLS internally via
-connection_param cert paths.
+All 3 clusters run with tlsMode=2 (mTLS), each with its own CA and server cert
+(SAN=localhost). CDC reads per-cluster client certs from paramtable via
+tls.clusters.<clusterID>.{caPemPath,clientPemPath,clientKeyPath}, configured
+in milvus.yaml (injected by start_clusters.sh via MILVUSCONF).
+
+Each cluster has a separate CA (ca-dev{N}.pem), so using the wrong CA for a
+target cluster will fail TLS verification. This validates that the per-cluster
+TLS config selection is correct.
+
+The replicate config only carries uri + token — no TLS fields in connection_param.
 """
 import os
 import time
@@ -27,31 +34,35 @@ CLUSTER_A_ADDR = "https://localhost:19530"
 CLUSTER_B_ADDR = "https://localhost:19531"
 CLUSTER_C_ADDR = "https://localhost:19532"
 
-# --- Certificate Paths ---
+# --- Certificate Directory ---
 CERT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "certs")
-CA_PEM = os.path.join(CERT_DIR, "ca.pem")
-
-# Per-cluster client certs (used in CDC connection_param for mTLS)
-CLUSTER_A_CLIENT_PEM = os.path.join(CERT_DIR, "cluster-a-client.pem")
-CLUSTER_A_CLIENT_KEY = os.path.join(CERT_DIR, "cluster-a-client.key")
-CLUSTER_B_CLIENT_PEM = os.path.join(CERT_DIR, "cluster-b-client.pem")
-CLUSTER_B_CLIENT_KEY = os.path.join(CERT_DIR, "cluster-b-client.key")
-CLUSTER_C_CLIENT_PEM = os.path.join(CERT_DIR, "cluster-c-client.pem")
-CLUSTER_C_CLIENT_KEY = os.path.join(CERT_DIR, "cluster-c-client.key")
 
 # --- PChannel config ---
 PCHANNEL_NUM = 16
 
 
-def create_tls_client(uri):
-    """Create a PyMilvus client with TLS CA verification (one-way TLS)."""
-    return MilvusClient(uri=uri, token=TOKEN, server_pem_path=CA_PEM)
+def create_tls_client(uri, dev_num):
+    """Create a PyMilvus client with mTLS (mutual TLS) using per-cluster certs.
+
+    Args:
+        uri: Cluster address (e.g. https://localhost:19530)
+        dev_num: Cluster number (1, 2, or 3) — selects the matching CA and client cert
+
+    Note: Must use ca_pem_path (not server_pem_path) to trigger PyMilvus mTLS branch
+    which reads client cert/key. server_pem_path only does one-way TLS.
+    """
+    return MilvusClient(
+        uri=uri, token=TOKEN,
+        ca_pem_path=os.path.join(CERT_DIR, f"ca-dev{dev_num}.pem"),
+        client_pem_path=os.path.join(CERT_DIR, f"pymilvus-dev{dev_num}.pem"),
+        client_key_path=os.path.join(CERT_DIR, f"pymilvus-dev{dev_num}.key"),
+    )
 
 
 # --- Global clients (initialized at import) ---
-cluster_A_client = create_tls_client(CLUSTER_A_ADDR)
-cluster_B_client = create_tls_client(CLUSTER_B_ADDR)
-cluster_C_client = create_tls_client(CLUSTER_C_ADDR)
+cluster_A_client = create_tls_client(CLUSTER_A_ADDR, 1)
+cluster_B_client = create_tls_client(CLUSTER_B_ADDR, 2)
+cluster_C_client = create_tls_client(CLUSTER_C_ADDR, 3)
 
 
 def reconnect_clients():
@@ -62,9 +73,9 @@ def reconnect_clients():
             c.close()
         except Exception:
             pass
-    cluster_A_client = create_tls_client(CLUSTER_A_ADDR)
-    cluster_B_client = create_tls_client(CLUSTER_B_ADDR)
-    cluster_C_client = create_tls_client(CLUSTER_C_ADDR)
+    cluster_A_client = create_tls_client(CLUSTER_A_ADDR, 1)
+    cluster_B_client = create_tls_client(CLUSTER_B_ADDR, 2)
+    cluster_C_client = create_tls_client(CLUSTER_C_ADDR, 3)
     logger.info("Reconnected all 3 TLS clients")
 
 
@@ -73,34 +84,28 @@ def generate_pchannels(cluster_id, pchannel_num=PCHANNEL_NUM):
     return [f"{cluster_id}-rootcoord-dml_{i}" for i in range(pchannel_num)]
 
 
-def build_replicate_config(source_id, target_ids, pchannel_num=PCHANNEL_NUM,
-                           client_pem=None, client_key=None):
-    """Build replicate config for star topology with mTLS cert paths.
+def build_replicate_config(source_id, target_ids, pchannel_num=PCHANNEL_NUM):
+    """Build replicate config for star topology.
+
+    CDC reads per-cluster client certs from paramtable via
+    tls.clusters.<clusterID>.*, so connection_param only needs uri + token.
 
     Args:
         source_id: Source cluster ID (center of star)
         target_ids: List of target cluster IDs
         pchannel_num: Number of pchannels per cluster
-        client_pem: Client cert path for CDC outbound connections
-        client_key: Client key path for CDC outbound connections
     """
-    cluster_info = {
+    cluster_addrs = {
         CLUSTER_A_ID: CLUSTER_A_ADDR,
         CLUSTER_B_ID: CLUSTER_B_ADDR,
         CLUSTER_C_ID: CLUSTER_C_ADDR,
     }
 
     clusters = []
-    for cid, addr in cluster_info.items():
-        conn_param = {"uri": addr, "token": TOKEN}
-        # Add TLS cert paths for CDC mTLS connections
-        if client_pem and client_key:
-            conn_param["ca_pem_path"] = CA_PEM
-            conn_param["client_pem_path"] = client_pem
-            conn_param["client_key_path"] = client_key
+    for cid, addr in cluster_addrs.items():
         clusters.append({
             "cluster_id": cid,
-            "connection_param": conn_param,
+            "connection_param": {"uri": addr, "token": TOKEN},
             "pchannels": generate_pchannels(cid, pchannel_num),
         })
 
@@ -112,11 +117,9 @@ def build_replicate_config(source_id, target_ids, pchannel_num=PCHANNEL_NUM,
     return {"clusters": clusters, "cross_cluster_topology": topology}
 
 
-def update_replicate_config(source_id, target_ids, client_pem=None,
-                            client_key=None, pchannel_num=PCHANNEL_NUM):
+def update_replicate_config(source_id, target_ids, pchannel_num=PCHANNEL_NUM):
     """Update replicate config on all 3 clusters in parallel."""
-    config = build_replicate_config(source_id, target_ids, pchannel_num,
-                                    client_pem, client_key)
+    config = build_replicate_config(source_id, target_ids, pchannel_num)
     clients = [cluster_A_client, cluster_B_client, cluster_C_client]
     labels = ["Cluster A", "Cluster B", "Cluster C"]
 
@@ -130,3 +133,57 @@ def update_replicate_config(source_id, target_ids, client_pem=None,
             logger.info(f"Replicate config updated on {label}")
 
     logger.info(f"Replicate config applied: {source_id} -> {target_ids}")
+
+
+def verify_per_cluster_certs_in_cdc_log(log_path, source_id, target_ids):
+    """Verify CDC log shows distinct per-cluster client certs for each target.
+
+    Checks that the 'CDC outbound TLS enabled' log line for each target
+    references the correct per-cluster cert (client-dev{N}.pem) and the
+    correct per-cluster CA (ca-dev{N}.pem).
+
+    Args:
+        log_path: Path to the CDC stdout log file
+        source_id: Source cluster ID (e.g. by-dev1)
+        target_ids: List of target cluster IDs to verify
+    """
+    import re
+
+    with open(log_path) as f:
+        content = f.read()
+
+    for tid in target_ids:
+        # Extract the clientPemPath logged for this target cluster
+        pattern = rf'\["CDC outbound TLS enabled"\].*?\[targetCluster={re.escape(tid)}\].*?\[clientPemPath=([^\]]+)\]'
+        matches = re.findall(pattern, content)
+        if not matches:
+            raise AssertionError(
+                f"No 'CDC outbound TLS enabled' log found for target {tid} in {log_path}"
+            )
+
+        # Extract cluster number suffix (e.g. "1" from "by-dev1")
+        dev_num = tid.split("dev")[-1]
+        expected_client_suffix = f"client-dev{dev_num}.pem"
+        expected_ca_suffix = f"ca-dev{dev_num}.pem"
+
+        # Check that at least one log entry uses the correct per-cluster client cert
+        found_correct = any(expected_client_suffix in m for m in matches)
+        if not found_correct:
+            raise AssertionError(
+                f"Target {tid}: expected cert path containing '{expected_client_suffix}', "
+                f"but found: {matches[0]}"
+            )
+
+        logger.info(f"Verified per-cluster client cert for {tid}: {expected_client_suffix}")
+
+        # Check per-cluster CA if logged
+        ca_pattern = rf'\["CDC outbound TLS enabled"\].*?\[targetCluster={re.escape(tid)}\].*?\[caPemPath=([^\]]+)\]'
+        ca_matches = re.findall(ca_pattern, content)
+        if ca_matches:
+            found_ca = any(expected_ca_suffix in m for m in ca_matches)
+            if not found_ca:
+                raise AssertionError(
+                    f"Target {tid}: expected CA path containing '{expected_ca_suffix}', "
+                    f"but found: {ca_matches[0]}"
+                )
+            logger.info(f"Verified per-cluster CA for {tid}: {expected_ca_suffix}")

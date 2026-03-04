@@ -36,10 +36,10 @@ def generate_data(n, start_id, dim=DEFAULT_DIM):
     ]
 
 
-def setup_collection(collection_name, primary_client, standby_client, replica_num=1):
+def setup_collection(collection_name, primary_client, standby_client, replica_num=1, shard_num=1):
     """Create collection, index, and load on primary. Wait for replication to standby."""
     schema = create_collection_schema()
-    primary_client.create_collection(collection_name=collection_name, schema=schema)
+    primary_client.create_collection(collection_name=collection_name, schema=schema, shards_num=shard_num)
     logger.info(f"Collection created on primary: {collection_name}")
     wait_for_collection_created(collection_name, standby_client)
 

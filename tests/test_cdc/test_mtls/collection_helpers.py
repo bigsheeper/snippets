@@ -1,6 +1,6 @@
 """
 Collection CRUD and wait helpers for CDC mTLS E2E tests.
-Supports multiple standby clusters (star topology: 1 primary → N standbys).
+Supports multiple standby clusters (star topology: 1 primary -> N standbys).
 """
 import random
 import time

@@ -101,9 +101,14 @@ def run_vchannel_allocation_guard_test():
                 update_replicate_config(current_source, current_target, current_pchannel_num)
 
                 primary_client, standby_client = get_primary_and_standby(current_source)
-                setup_collection(post_update_name, primary_client, standby_client)
+                setup_collection(
+                    post_update_name,
+                    primary_client,
+                    standby_client,
+                    shard_num=INIT_PCHANNEL_NUM,
+                )
                 insert_and_verify(post_update_name, primary_client, standby_client)
-                cleanup_collection(post_update_name, primary_client, standby_client)
+                # cleanup_collection(post_update_name, primary_client, standby_client)
                 logger.info(f"[Guard {round_num}] Baseline replication verified")
 
             else:
@@ -123,10 +128,15 @@ def run_vchannel_allocation_guard_test():
                 # the old count. With the fix, AllocVirtualChannels skips the new pchannel.
                 logger.info(f"[Guard {round_num}] Creating collection BEFORE replicate config update "
                             f"(pchannels={current_pchannel_num} exist, config has {current_pchannel_num - 1})")
-                setup_collection(pre_update_name, primary_client, standby_client)
+                setup_collection(
+                    pre_update_name,
+                    primary_client,
+                    standby_client,
+                    shard_num=INIT_PCHANNEL_NUM,
+                )
                 insert_and_verify(pre_update_name, primary_client, standby_client)
                 logger.info(f"[Guard {round_num}] Pre-config-update collection replicated successfully")
-                cleanup_collection(pre_update_name, primary_client, standby_client)
+                # cleanup_collection(pre_update_name, primary_client, standby_client)
 
                 # --- Update replicate config to include new pchannels ---
                 logger.info(f"[Guard {round_num}] Updating replicate config to pchannels={current_pchannel_num}")
@@ -135,10 +145,15 @@ def run_vchannel_allocation_guard_test():
                 # --- Create collection AFTER config update ---
                 logger.info(f"[Guard {round_num}] Creating collection AFTER replicate config update "
                             f"(pchannels={current_pchannel_num})")
-                setup_collection(post_update_name, primary_client, standby_client)
+                setup_collection(
+                    post_update_name,
+                    primary_client,
+                    standby_client,
+                    shard_num=INIT_PCHANNEL_NUM,
+                )
                 insert_and_verify(post_update_name, primary_client, standby_client)
                 logger.info(f"[Guard {round_num}] Post-config-update collection replicated successfully")
-                cleanup_collection(post_update_name, primary_client, standby_client)
+                # cleanup_collection(post_update_name, primary_client, standby_client)
 
             elapsed = time.time() - round_start
             success_count += 1
@@ -158,6 +173,7 @@ def run_vchannel_allocation_guard_test():
                         primary_client.drop_collection(name)
             except Exception:
                 pass
+            break
 
     total_time = time.time() - start_time
     logger.info("=" * 60)
@@ -197,6 +213,7 @@ def run_pchannel_increase_test(init_pchannel_num=INIT_PCHANNEL_NUM):
                 # --- Random switchover before restart ---
                 # This ensures the pchannel increase happens from a random topology direction.
                 if random.choice([True, False]):
+                # if random.choice([False]):    
                     current_source, current_target = current_target, current_source
                     switchover_count += 1
                     logger.info(f"[Round {round_num}] Pre-restart switchover -> "
@@ -217,9 +234,14 @@ def run_pchannel_increase_test(init_pchannel_num=INIT_PCHANNEL_NUM):
                 primary_client, standby_client = get_primary_and_standby(current_source)
                 logger.info(f"[Round {round_num}] Guard test: creating collection before config update "
                             f"(pchannels={current_pchannel_num} exist, config has {current_pchannel_num - 1})")
-                setup_collection(pre_update_name, primary_client, standby_client)
+                setup_collection(
+                    pre_update_name,
+                    primary_client,
+                    standby_client,
+                    shard_num=INIT_PCHANNEL_NUM,
+                )
                 insert_and_verify(pre_update_name, primary_client, standby_client)
-                cleanup_collection(pre_update_name, primary_client, standby_client)
+                # cleanup_collection(pre_update_name, primary_client, standby_client)
                 guard_test_count += 1
                 logger.info(f"[Round {round_num}] Guard test passed")
 
@@ -230,6 +252,7 @@ def run_pchannel_increase_test(init_pchannel_num=INIT_PCHANNEL_NUM):
 
             # --- Random switchover after pchannel increase ---
             if random.choice([True, False]):
+            # if random.choice([False]):
                 current_source, current_target = current_target, current_source
                 switchover_count += 1
                 logger.info(f"[Round {round_num}] Post-increase switchover -> "
@@ -239,11 +262,16 @@ def run_pchannel_increase_test(init_pchannel_num=INIT_PCHANNEL_NUM):
             # --- Create, insert, verify ---
             primary_client, standby_client = get_primary_and_standby(current_source)
 
-            setup_collection(collection_name, primary_client, standby_client)
+            setup_collection(
+                collection_name,
+                primary_client,
+                standby_client,
+                shard_num=INIT_PCHANNEL_NUM,
+            )
             insert_and_verify(collection_name, primary_client, standby_client)
 
             # --- Cleanup ---
-            cleanup_collection(collection_name, primary_client, standby_client)
+            # cleanup_collection(collection_name, primary_client, standby_client)
 
             elapsed = time.time() - round_start
             success_count += 1
@@ -264,6 +292,7 @@ def run_pchannel_increase_test(init_pchannel_num=INIT_PCHANNEL_NUM):
                         primary_client.drop_collection(name)
             except Exception:
                 pass
+            break
 
     total_time = time.time() - start_time
     logger.info("=" * 60)
