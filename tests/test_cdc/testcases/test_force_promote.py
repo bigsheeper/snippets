@@ -84,10 +84,29 @@ def init_replication_a_to_b():
     logger.info("Replication initialized: A -> B")
 
 
+def make_standalone_config(cluster_id: str, addr: str) -> dict:
+    """Build the standalone (single-cluster, no-topology) config for force promote.
+
+    The server requires exactly one cluster (the current cluster) with no topology.
+    """
+    return {
+        "clusters": [
+            {
+                "cluster_id": cluster_id,
+                "connection_param": {"uri": addr, "token": TOKEN},
+                "pchannels": generate_pchannels(cluster_id),
+            }
+        ],
+        "cross_cluster_topology": [],
+    }
+
+
 def force_promote_secondary():
     """Force promote cluster B from secondary to standalone primary."""
-    # clusters=[] required by official pymilvus API; server ignores it for force_promote
-    cluster_B_client.update_replicate_configuration(clusters=[], force_promote=True)
+    cluster_B_client.update_replicate_configuration(
+        **make_standalone_config(CLUSTER_B_ID, CLUSTER_B_ADDR),
+        force_promote=True,
+    )
     logger.info("Force promote called on cluster B")
 
 
@@ -153,7 +172,10 @@ def test_force_promote_on_primary_fails():
     logger.info("=== Test: Force promote on primary cluster should fail ===")
 
     try:
-        cluster_A_client.update_replicate_configuration(clusters=[], force_promote=True)
+        cluster_A_client.update_replicate_configuration(
+            **make_standalone_config(CLUSTER_A_ID, CLUSTER_A_ADDR),
+            force_promote=True,
+        )
         raise AssertionError("Expected force promote on primary to fail, but it succeeded")
     except AssertionError:
         raise
@@ -169,35 +191,38 @@ def test_force_promote_on_primary_fails():
 
 def test_force_promote_with_non_empty_clusters_fails():
     """
-    Test: Calling force promote on the primary cluster (A) with non-empty clusters
-    still fails because A is not a secondary cluster.
+    Test: Calling force promote with multiple clusters should fail.
 
-    Note: On test-failover branch, the server ignores the provided config and only
-    validates cluster role. Calling force_promote on a primary always fails regardless
-    of the clusters field content.
+    Force promote requires exactly one cluster (the current cluster only).
+    Passing both A and B clusters is rejected by the server.
     """
     logger.info("=== Test: Force promote with non-empty clusters should fail ===")
 
-    clusterA_pchannels = generate_pchannels(CLUSTER_A_ID)
     try:
-        cluster_A_client.update_replicate_configuration(
+        cluster_B_client.update_replicate_configuration(
             force_promote=True,
             clusters=[
                 {
                     "cluster_id": CLUSTER_A_ID,
                     "connection_param": {"uri": CLUSTER_A_ADDR, "token": TOKEN},
-                    "pchannels": clusterA_pchannels,
-                }
+                    "pchannels": generate_pchannels(CLUSTER_A_ID),
+                },
+                {
+                    "cluster_id": CLUSTER_B_ID,
+                    "connection_param": {"uri": CLUSTER_B_ADDR, "token": TOKEN},
+                    "pchannels": generate_pchannels(CLUSTER_B_ID),
+                },
             ],
+            cross_cluster_topology=[],
         )
-        raise AssertionError("Expected force promote with non-empty clusters to fail")
+        raise AssertionError("Expected force promote with multiple clusters to fail")
     except AssertionError:
         raise
     except Exception as e:
         error_msg = str(e)
         logger.info(f"Got expected error: {error_msg}")
-        assert "secondary" in error_msg.lower() or "cluster" in error_msg.lower() or "primary" in error_msg.lower(), (
-            f"Expected error about cluster role, got: {error_msg}"
+        assert "cluster" in error_msg.lower() or "secondary" in error_msg.lower(), (
+            f"Expected error about cluster config, got: {error_msg}"
         )
 
     logger.info("PASSED: Force promote with non-empty clusters correctly rejected")
@@ -205,19 +230,24 @@ def test_force_promote_with_non_empty_clusters_fails():
 
 def test_force_promote_with_topology_fails():
     """
-    Test: Calling force promote on the primary cluster (A) with non-empty topology
-    still fails because A is not a secondary cluster.
+    Test: Calling force promote on secondary cluster B with non-empty topology fails.
 
-    Note: On test-failover branch, the server ignores the provided config and only
-    validates cluster role. Calling force_promote on a primary always fails regardless
-    of the topology field content.
+    Force promote requires no topology (standalone primary config).
+    Providing a non-empty cross_cluster_topology is rejected by the server.
     """
     logger.info("=== Test: Force promote with non-empty topology should fail ===")
 
     try:
-        cluster_A_client.update_replicate_configuration(
-            clusters=[],
+        # Correct cluster config (only B), but non-empty topology — should be rejected
+        cluster_B_client.update_replicate_configuration(
             force_promote=True,
+            clusters=[
+                {
+                    "cluster_id": CLUSTER_B_ID,
+                    "connection_param": {"uri": CLUSTER_B_ADDR, "token": TOKEN},
+                    "pchannels": generate_pchannels(CLUSTER_B_ID),
+                }
+            ],
             cross_cluster_topology=[
                 {"source_cluster_id": CLUSTER_A_ID, "target_cluster_id": CLUSTER_B_ID}
             ],
@@ -228,7 +258,7 @@ def test_force_promote_with_topology_fails():
     except Exception as e:
         error_msg = str(e)
         logger.info(f"Got expected error: {error_msg}")
-        assert "topology" in error_msg.lower() or "empty" in error_msg.lower() or "primary" in error_msg.lower(), (
+        assert "topology" in error_msg.lower() or "empty" in error_msg.lower(), (
             f"Expected error about topology being non-empty, got: {error_msg}"
         )
 
