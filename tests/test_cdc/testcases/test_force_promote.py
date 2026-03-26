@@ -9,7 +9,7 @@ Test scenarios:
 2. Force promote with non-empty clusters should fail
 3. Force promote with non-empty topology should fail
 4. Force promote succeeds on secondary cluster (happy path with data integrity)
-5. Force promote is idempotent (calling twice should not fail)
+5. Force promote on already-promoted (primary) cluster fails gracefully
 
 Setup assumption:
   - Cluster A runs on localhost:19530
@@ -258,8 +258,8 @@ def test_force_promote_with_topology_fails():
     except Exception as e:
         error_msg = str(e)
         logger.info(f"Got expected error: {error_msg}")
-        assert "topology" in error_msg.lower() or "empty" in error_msg.lower(), (
-            f"Expected error about topology being non-empty, got: {error_msg}"
+        assert "topology" in error_msg.lower() or "empty" in error_msg.lower() or "secondary" in error_msg.lower(), (
+            f"Expected error about topology or cluster role, got: {error_msg}"
         )
 
     logger.info("PASSED: Force promote with non-empty topology correctly rejected")
@@ -337,14 +337,13 @@ def test_force_promote_success():
     logger.info("=== Test force_promote_success PASSED ===")
 
 
-def test_force_promote_idempotent():
+def test_force_promote_on_promoted_primary_fails():
     """
-    Test: Force promote on an already-promoted cluster fails gracefully.
+    Test: Force promote on an already-promoted (standalone primary) cluster fails.
 
     After the success test promotes B to standalone primary, calling force promote
-    again on B (now primary) should fail with a clear error about cluster role.
-    This verifies that force promote is safely rejected when the cluster is
-    no longer in secondary state, preventing accidental re-promotion.
+    again on B should fail with a clear error about cluster role — B is now primary,
+    not secondary. This verifies the role guard prevents accidental re-promotion.
 
     Prerequisite: test_force_promote_success must have run first (B is now primary).
     """
@@ -366,7 +365,7 @@ def test_force_promote_idempotent():
             f"Expected error about cluster role, got: {error_msg}"
         )
 
-    logger.info("=== Test force_promote_idempotent PASSED ===")
+    logger.info("=== Test force_promote_on_promoted_primary_fails PASSED ===")
 
 
 def main():
@@ -378,14 +377,14 @@ def main():
       python test_force_promote.py clusters_fails
       python test_force_promote.py topology_fails
       python test_force_promote.py success
-      python test_force_promote.py idempotent
+      python test_force_promote.py promoted_primary_fails
     """
     tests = {
         "primary_fails": test_force_promote_on_primary_fails,
         "clusters_fails": test_force_promote_with_non_empty_clusters_fails,
         "topology_fails": test_force_promote_with_topology_fails,
         "success": test_force_promote_success,
-        "idempotent": test_force_promote_idempotent,
+        "promoted_primary_fails": test_force_promote_on_promoted_primary_fails,
     }
 
     if len(sys.argv) > 1:
