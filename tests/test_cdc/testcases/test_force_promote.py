@@ -22,8 +22,14 @@ import subprocess
 import sys
 import time
 import urllib.request
+
+BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if BASE not in sys.path:
+    sys.path.insert(0, BASE)
+
 from loguru import logger
 from common import *
+from port_layout import CLUSTER_B_PROXY_HEALTH
 from collection import (
     create_collection_on_primary,
     wait_for_standby_create_collection,
@@ -31,13 +37,10 @@ from collection import (
     wait_for_standby_load_collection,
     release_collection_on_primary,
     drop_collection_on_primary,
-    wait_for_standby_drop_collection,
 )
 from index import create_index_on_primary, wait_for_standby_create_index
 from insert import (
     INSERT_COUNT,
-    INSERT_ROUNDS,
-    insert_into_primary_multiple_rounds,
     insert_into_primary,
     generate_data,
 )
@@ -49,7 +52,6 @@ CLUSTER_B_ID = "by-dev2"
 PCHANNEL_NUM = 16
 
 MILVUS_CONTROL = os.path.expanduser("~/workspace/snippets/milvus_control/milvus_control")
-CLUSTER_B_METRICS = "http://localhost:19092"
 HEALTH_CHECK_TIMEOUT = 120
 
 
@@ -127,7 +129,7 @@ def restart_cluster_b_as_secondary():
     # Stop cluster B
     logger.info("Stopping cluster B...")
     subprocess.run(
-        f"{MILVUS_CONTROL} -m -s -f --standby stop_milvus",
+        f"{MILVUS_CONTROL} -m -c -s -f --standby stop_milvus",
         shell=True,
         env={**os.environ},
         capture_output=True,
@@ -138,7 +140,7 @@ def restart_cluster_b_as_secondary():
     # Start cluster B (reuse volume — reads secondary config from etcd)
     logger.info("Starting cluster B as secondary...")
     result = subprocess.run(
-        f"{MILVUS_CONTROL} -m -s -u --standby start_milvus",
+        f"{MILVUS_CONTROL} -m -c -s -u --standby start_milvus",
         shell=True,
         env={**os.environ},
         capture_output=True,
@@ -151,7 +153,7 @@ def restart_cluster_b_as_secondary():
     start = time.time()
     while time.time() - start < HEALTH_CHECK_TIMEOUT:
         try:
-            with urllib.request.urlopen(f"{CLUSTER_B_METRICS}/healthz", timeout=5) as resp:
+            with urllib.request.urlopen(f"{CLUSTER_B_PROXY_HEALTH}/healthz", timeout=5) as resp:
                 if resp.read().decode().strip() == "OK":
                     logger.info(f"Cluster B healthy after {time.time() - start:.0f}s")
                     time.sleep(5)  # allow services to stabilize

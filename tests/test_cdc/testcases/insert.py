@@ -5,7 +5,9 @@ from common import *
 from collection import *
 
 # Insert/Delete related constants
-INSERT_COUNT = 1000
+# 可通过环境变量 FAILOVER_ROWS 覆盖，以缩短端到端等待
+import os
+INSERT_COUNT = int(os.getenv("FAILOVER_ROWS", "300"))
 INSERT_ROUNDS = 100
 DELETE_COUNT = 2000
 

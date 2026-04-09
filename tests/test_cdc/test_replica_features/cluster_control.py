@@ -8,13 +8,15 @@ import subprocess
 import time
 from loguru import logger
 
+from port_layout import CLUSTER_A_PROXY_HEALTH, CLUSTER_B_PROXY_HEALTH
+
 MILVUS_CONTROL = os.path.expanduser("~/workspace/snippets/milvus_control/milvus_control")
 HEALTH_CHECK_TIMEOUT = 120  # seconds
 HEALTH_CHECK_INTERVAL = 2  # seconds
 
-# Metrics ports for health check (proxy metrics in cluster+streaming mode)
-CLUSTER_A_METRICS = "http://localhost:19101"
-CLUSTER_B_METRICS = "http://localhost:19201"
+# Shared proxy health endpoints for cluster+streaming mode
+CLUSTER_A_METRICS = CLUSTER_A_PROXY_HEALTH
+CLUSTER_B_METRICS = CLUSTER_B_PROXY_HEALTH
 
 
 def _run(cmd, env_extra=None):

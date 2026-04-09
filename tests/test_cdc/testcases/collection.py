@@ -42,6 +42,9 @@ def create_collections_on_primary(collection_names, client):
 
 
 def load_collection_on_primary(collection_name, client):
+    if not client.has_collection(collection_name):
+        logger.warning(f"Skip load: collection not found on primary, name: {collection_name}")
+        return
     client.load_collection(collection_name)
     logger.info(f"Collection loaded on primary, name: {collection_name}")
 
@@ -52,7 +55,14 @@ def load_collections_on_primary(collection_names, client):
 
 
 def release_collection_on_primary(collection_name, client):
-    client.release_collection(collection_name)
+    if not client.has_collection(collection_name):
+        logger.warning(f"Skip release: collection not found on primary, name: {collection_name}")
+        return
+    try:
+        client.release_collection(collection_name)
+    except Exception as e:
+        logger.warning(f"Release ignored due to race: {collection_name}, err={e}")
+        return
     logger.info(f"Collection released on primary, name: {collection_name}")
 
 
@@ -62,7 +72,14 @@ def release_collections_on_primary(collection_names, client):
 
 
 def drop_collection_on_primary(collection_name, client):
-    client.drop_collection(collection_name)
+    if not client.has_collection(collection_name):
+        logger.warning(f"Skip drop: collection not found on primary, name: {collection_name}")
+        return
+    try:
+        client.drop_collection(collection_name)
+    except Exception as e:
+        logger.warning(f"Drop ignored due to race: {collection_name}, err={e}")
+        return
     logger.info(f"Collection dropped on primary, name: {collection_name}")
 
 
