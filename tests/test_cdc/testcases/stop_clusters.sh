@@ -1,0 +1,1 @@
+../failover/stop_clusters.sh

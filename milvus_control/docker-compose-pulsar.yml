@@ -18,7 +18,7 @@ services:
       - "4001:4001"
 
   minio:
-    image: minio/minio:RELEASE.2022-03-17T06-34-49Z
+    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
     restart: always
     ports:
       - "9000:9000"

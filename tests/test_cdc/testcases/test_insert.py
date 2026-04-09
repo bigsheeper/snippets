@@ -1,39 +1,47 @@
-from common import *
-from collection import *
-from index import *
-from insert import *
-from query import *
+"""Test insert/delete replication with data integrity checks."""
+import _path_setup  # noqa: F401
+from loguru import logger
+from common import (
+    cluster_A_client, cluster_B_client,
+    DEFAULT_COLLECTION_NAME, PK_FIELD_NAME, INSERT_COUNT, INSERT_ROUNDS,
+    init_replication_a_to_b,
+    setup_collection, cleanup_collection, insert_and_verify,
+    generate_data, query_all, wait_for_query_consistent,
+)
+
 
 def test_insert():
-    collection_name = DEFAULT_COLLECTION_NAME
+    primary = cluster_A_client
+    standby = cluster_B_client
+    name = DEFAULT_COLLECTION_NAME
 
-    primary_client = cluster_A_client
-    standby_client = cluster_B_client
+    init_replication_a_to_b()
+    setup_collection(name, primary, standby)
 
-    create_collection_on_primary(collection_name, primary_client)
-    wait_for_standby_create_collection(collection_name, standby_client)
+    # Multi-round insert
+    total = INSERT_COUNT * INSERT_ROUNDS
+    start_id = 1
+    for _ in range(INSERT_ROUNDS):
+        data = generate_data(INSERT_COUNT, start_id)
+        primary.insert(name, data)
+        start_id += INSERT_COUNT
+    logger.info(f"Inserted {total} rows in {INSERT_ROUNDS} rounds")
 
-    create_index_on_primary(collection_name, primary_client)
-    wait_for_standby_create_index(collection_name, standby_client)
+    res = query_all(primary, name)
+    assert len(res) == total, f"Expected {total} rows on primary, got {len(res)}"
+    wait_for_query_consistent(name, res, standby)
 
-    load_collection_on_primary(collection_name, primary_client)
-    wait_for_standby_load_collection(collection_name, standby_client)
+    # Delete first 2000
+    delete_count = min(2000, total)
+    primary.delete(collection_name=name, filter=f"{PK_FIELD_NAME} <= {delete_count}")
+    logger.info(f"Deleted rows with {PK_FIELD_NAME} <= {delete_count}")
 
-    total_count = INSERT_COUNT * INSERT_ROUNDS
-    insert_into_primary_multiple_rounds(collection_name, primary_client)
-    res_on_primary = query_on_primary(collection_name, total_count, primary_client)
-    wait_for_standby_query(collection_name, res_on_primary, standby_client)
+    res = query_all(primary, name)
+    assert len(res) == total - delete_count, f"Expected {total - delete_count}, got {len(res)}"
+    wait_for_query_consistent(name, res, standby)
 
-    delete_expr = f"{PK_FIELD_NAME} <= {DELETE_COUNT}"
-    delete_from_primary(collection_name, delete_expr, primary_client)
-    res_on_primary = query_on_primary(collection_name, total_count - DELETE_COUNT, primary_client)
-    wait_for_standby_query(collection_name, res_on_primary, standby_client)
-
-    release_collection_on_primary(collection_name, primary_client)
-    wait_for_standby_release_collection(collection_name, standby_client)
-
-    drop_collection_on_primary(collection_name, primary_client)
-    wait_for_standby_drop_collection(collection_name, standby_client)
+    cleanup_collection(name, primary, standby)
+    logger.info("PASSED: insert/delete replication")
 
 
 if __name__ == "__main__":

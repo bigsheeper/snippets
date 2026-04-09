@@ -19,6 +19,19 @@ if [[ -z "${MILVUS_VOLUME_DIRECTORY}" ]]; then
     exit 1
 fi
 
+# ============================================================
+# Start third-party services (etcd/minio/pulsar)
+# ============================================================
+COMPOSE_FILE="${HOME}/workspace/snippets/milvus_control/docker-compose-pulsar.yml"
+if [[ ! -f "${COMPOSE_FILE}" ]]; then
+    echo "Compose file not found: ${COMPOSE_FILE}"; exit 1
+fi
+
+echo "=== Starting third-party services (etcd/minio/pulsar) ==="
+export MILVUS_INF_VOLUME_DIRECTORY="${MILVUS_VOLUME_DIRECTORY}"
+docker compose -f "${COMPOSE_FILE}" up -d
+echo "Third-party services started."
+
 WORKSPACE_TAG=${WORKSPACE_TAG:-$(date +%F-%H-%M-%S)}
 VOL="${MILVUS_VOLUME_DIRECTORY}/${WORKSPACE_TAG}"
 LOG="${VOL}/milvus-logs"

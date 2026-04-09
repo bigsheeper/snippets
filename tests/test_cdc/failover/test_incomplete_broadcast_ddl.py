@@ -1,83 +1,53 @@
-import os, sys
-
-BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if BASE not in sys.path:
-    sys.path.insert(0, BASE)
-TESTCASES = os.path.join(BASE, "testcases")
-if TESTCASES not in sys.path:
-    sys.path.insert(0, TESTCASES)
-
-from testcases.common import cluster_A_client, cluster_B_client
-from testcases.collection import (
-    create_collection_on_primary, wait_for_standby_create_collection,
-    load_collection_on_primary, wait_for_standby_load_collection,
-    drop_collection_on_primary, release_collection_on_primary,
+"""Test: DDL operations during force promotion (incomplete broadcast edge case)."""
+import _path_setup  # noqa: F401
+from loguru import logger
+from common import (
+    cluster_A_client, cluster_B_client, INSERT_COUNT,
+    setup_collection, drop_if_exists, generate_data,
+    wait_for_collection_loaded,
 )
-from testcases.index import create_index_on_primary, wait_for_standby_create_index
-from testcases.insert import INSERT_COUNT, insert_into_primary
-from failover import utils
+from failover.utils import ensure_secondary_b, init_replication_a_to_b, force_promote_b, await_rows
 
 COL = "failover_broadcast_ddl"
-
-def _setup():
-    utils.ensure_secondary_b(); utils.init_replication_a_to_b()
+COL_NEW = f"{COL}_new"
 
 
-def _teardown():
-    try:
-        release_collection_on_primary(COL, cluster_B_client)
-        cluster_B_client.drop_collection(COL)
-    except Exception:
-        pass
-    try:
-        drop_collection_on_primary(COL, cluster_A_client)
-    except Exception:
-        pass
-    try:
-        new_col = f"{COL}_new"
-        release_collection_on_primary(new_col, cluster_B_client)
-        cluster_B_client.drop_collection(new_col)
-    except Exception:
-        pass
+def test_incomplete_broadcast_ddl():
+    # Setup
+    ensure_secondary_b()
+    init_replication_a_to_b()
+    drop_if_exists(cluster_A_client, COL, "A")
+    drop_if_exists(cluster_B_client, COL, "B")
+    drop_if_exists(cluster_B_client, COL_NEW, "B")
 
+    # Create + index + load on A, wait on B
+    setup_collection(COL, cluster_A_client, cluster_B_client)
 
+    # Release on A (in-flight ddl, may not replicate before promote)
+    cluster_A_client.release_collection(COL)
 
-def run_incomplete_broadcast_ddl_flow():
-    # 1) create collection on A, wait on B
-    create_collection_on_primary(COL, cluster_A_client)
-    wait_for_standby_create_collection(COL, cluster_B_client)
+    # Force promote B
+    force_promote_b()
 
-    # 2) create index on A, wait on B
-    create_index_on_primary(COL, cluster_A_client)
-    wait_for_standby_create_index(COL, cluster_B_client)
+    # B is now primary — create new collection
+    from common.schema import create_collection_schema, default_index_params
+    schema = create_collection_schema()
+    cluster_B_client.create_collection(collection_name=COL_NEW, schema=schema)
+    idx = default_index_params(cluster_B_client)
+    cluster_B_client.create_index(COL_NEW, index_params=idx)
+    cluster_B_client.load_collection(COL_NEW)
 
-    # 3) load collection on A, wait on B
-    load_collection_on_primary(COL, cluster_A_client)
-    wait_for_standby_load_collection(COL, cluster_B_client)
+    # Insert + verify on B
+    data = generate_data(INSERT_COUNT, 1)
+    cluster_B_client.insert(COL_NEW, data)
+    await_rows(cluster_B_client, COL_NEW, INSERT_COUNT)
 
-    # 4) release collection on A
-    release_collection_on_primary(COL, cluster_A_client)
-
-    # 5) force promote / failover
-    utils.force_promote_b()
-
-    # 6) create new collection on B
-    new_col = f"{COL}_new"
-    create_collection_on_primary(new_col, cluster_B_client)
-
-    # 7) load new collection on B
-    cluster_B_client.load_collection(new_col)
-
-    # 8) insert + verify on B
-    insert_into_primary(1, new_col, cluster_B_client)
-    utils.await_rows(cluster_B_client, new_col, INSERT_COUNT)
+    # Cleanup
+    drop_if_exists(cluster_B_client, COL, "B")
+    drop_if_exists(cluster_B_client, COL_NEW, "B")
+    drop_if_exists(cluster_A_client, COL, "A")
+    logger.info("PASSED: incomplete broadcast DDL")
 
 
 if __name__ == "__main__":
-    # 直接运行：python test_incomplete_broadcast_ddl.py
-    _setup()
-    try:
-        run_incomplete_broadcast_ddl_flow()
-        print("OK")
-    finally:
-        _teardown()
+    test_incomplete_broadcast_ddl()

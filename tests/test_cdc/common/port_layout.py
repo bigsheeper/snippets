@@ -1,3 +1,5 @@
+"""Health check endpoints for multi-node clusters."""
+
 CLUSTER_A_METRICS_BASE = 19100
 CLUSTER_B_METRICS_BASE = 19200
 

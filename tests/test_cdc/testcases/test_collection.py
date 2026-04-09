@@ -1,29 +1,38 @@
-from common import *
-from collection import *
-from index import *
-from insert import *
+"""Test collection lifecycle replication: create -> index -> load -> release -> drop."""
+import _path_setup  # noqa: F401
+from loguru import logger
+from common import (
+    cluster_A_client, cluster_B_client,
+    COLLECTION_NAME_PREFIX, NUM_COLLECTIONS,
+    init_replication_a_to_b,
+    setup_collection, cleanup_collection,
+    wait_for_collection_released, wait_for_collection_dropped,
+)
 
 
 def test_collection():
-    primary_client = cluster_A_client
-    standby_client = cluster_B_client
-    
-    collection_names = get_collection_names()
+    primary = cluster_A_client
+    standby = cluster_B_client
 
-    create_collections_on_primary(collection_names, primary_client)
-    wait_for_standby_create_collections(collection_names, standby_client)
+    init_replication_a_to_b()
 
-    create_indexes_on_primary(collection_names, primary_client)
-    wait_for_standby_create_indexes(collection_names, standby_client)
+    names = [f"{COLLECTION_NAME_PREFIX}{i}" for i in range(NUM_COLLECTIONS)]
 
-    load_collections_on_primary(collection_names, primary_client)
-    wait_for_standby_load_collections(collection_names, standby_client)
+    logger.info(f"Creating {NUM_COLLECTIONS} collections with index + load...")
+    for name in names:
+        setup_collection(name, primary, standby)
 
-    release_collections_on_primary(collection_names, primary_client)
-    wait_for_standby_release_collections(collection_names, standby_client)
+    logger.info("Releasing all collections...")
+    for name in names:
+        primary.release_collection(name)
+        wait_for_collection_released(name, standby)
 
-    drop_collections_on_primary(collection_names, primary_client)
-    wait_for_standby_drop_collections(collection_names, standby_client)
+    logger.info("Dropping all collections...")
+    for name in names:
+        primary.drop_collection(name)
+        wait_for_collection_dropped(name, standby)
+
+    logger.info("PASSED: collection lifecycle replication")
 
 
 if __name__ == "__main__":
