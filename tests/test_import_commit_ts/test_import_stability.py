@@ -183,9 +183,9 @@ def run_accumulate_round(round_num, start_time, state):
 
     # Verify old data still intact (sample from first batch if exists)
     if state.committed_total > 0:
-        # Pick an ID from the middle of existing data that wasn't deleted
-        # Each previous round deletes [prev_offset, prev_offset+99], keeps [prev_offset+100, prev_offset+499]
-        safe_id = offset - 400 + 200  # middle of kept range from previous round
+        # Previous round kept [prev_offset+100, prev_offset+NUM_ROWS-1]; sample from middle
+        prev_offset = offset - NUM_ROWS
+        safe_id = prev_offset + NUM_ROWS // 2  # well within the kept range
         if safe_id >= 0:
             results = client.query(collection_name=ACCUM_COLLECTION,
                                    filter=f"id == {safe_id}", output_fields=["id"])
