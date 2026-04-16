@@ -11,6 +11,7 @@ from common import (
 )
 
 REPL_A_TO_B = build_replicate_config_2(CLUSTER_A_ID, CLUSTER_B_ID)
+STANDALONE_A = build_standalone_config(CLUSTER_A_ID)
 STANDALONE_B = build_standalone_config(CLUSTER_B_ID)
 
 
@@ -35,7 +36,8 @@ def init_replication_a_to_b():
 
 
 def force_promote_b():
-    cluster_B_client.update_replicate_configuration(**STANDALONE_B, force_promote=True)
+    cluster_B_client.update_replicate_configuration(
+        **STANDALONE_B, force_promote=True)
     logger.info("Force promote called on B")
 
 

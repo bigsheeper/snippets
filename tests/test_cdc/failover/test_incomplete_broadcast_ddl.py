@@ -4,7 +4,7 @@ from loguru import logger
 from common import (
     cluster_A_client, cluster_B_client, INSERT_COUNT,
     setup_collection, drop_if_exists, generate_data,
-    wait_for_collection_loaded,
+    wait_for_collection_loaded, wait_for_collection_dropped,
 )
 from failover.utils import ensure_secondary_b, init_replication_a_to_b, force_promote_b, await_rows
 
@@ -16,9 +16,6 @@ def test_incomplete_broadcast_ddl():
     # Setup
     ensure_secondary_b()
     init_replication_a_to_b()
-    drop_if_exists(cluster_A_client, COL, "A")
-    drop_if_exists(cluster_B_client, COL, "B")
-    drop_if_exists(cluster_B_client, COL_NEW, "B")
 
     # Create + index + load on A, wait on B
     setup_collection(COL, cluster_A_client, cluster_B_client)
