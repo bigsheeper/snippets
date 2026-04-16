@@ -153,8 +153,7 @@ def run_fresh_round(round_num, start_time):
     print(f"  -- Phase 3: Post-commit --")
     import_commit(job_id)
     wait_for_import_done(job_id)
-    client.release_collection(coll)
-    client.load_collection(coll)
+    client.refresh_load(coll)
     time.sleep(2)
 
     # Insert batch 3
@@ -257,8 +256,7 @@ def run_accumulate_round(round_num, start_time, state):
     print(f"  -- Phase 3: Post-commit --")
     import_commit(job_id)
     wait_for_import_done(job_id)
-    client.release_collection(ACCUM_COLLECTION)
-    client.load_collection(ACCUM_COLLECTION)
+    client.refresh_load(ACCUM_COLLECTION)
     time.sleep(2)
 
     p3_varchars = [f"{rnd}_insert_p3_{i}" for i in range(INSERT_BATCH_SIZE)]
