@@ -1,1 +1,1 @@
-../testcases/stop_clusters.sh
+../failover/stop_clusters.sh
