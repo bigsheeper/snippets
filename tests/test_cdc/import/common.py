@@ -69,10 +69,10 @@ def import_create_on_a(collection_name, files, auto_commit=False, partition_name
 
 
 def import_get_progress_on_a(job_id):
-    """Return (state, progress)."""
+    """Return (state, progress, reason). `reason` is the server-side error text if any."""
     result = _api("/jobs/import/describe", {"jobId": job_id}, base_uri=CLUSTER_A_REST_URI)
     data = result.get("data", {})
-    return data.get("state", "Unknown"), data.get("progress", 0)
+    return data.get("state", "Unknown"), data.get("progress", 0), data.get("reason", "")
 
 
 def import_commit_on_a(job_id):
@@ -90,11 +90,11 @@ def wait_for_import_state_on_a(job_id, target_state, timeout=180):
     logger.info(f"Waiting for A job {job_id} to reach '{target_state}' (timeout={timeout}s)")
     start = time.time()
     while time.time() - start < timeout:
-        state, progress = import_get_progress_on_a(job_id)
+        state, progress, reason = import_get_progress_on_a(job_id)
         if state == target_state:
             return True
         if state == "Failed":
-            raise RuntimeError(f"Import job {job_id} on A failed")
+            raise RuntimeError(f"Import job {job_id} on A failed: {reason or '(no reason from server)'}")
         logger.debug(f"  state={state}, progress={progress}")
         time.sleep(2)
     raise TimeoutError(f"Import {job_id} on A did not reach '{target_state}' in {timeout}s")
@@ -146,8 +146,10 @@ def generate_and_upload_parquet(num_rows, start_id=0, prefix="import",
         aws_access_key_id=MINIO_ACCESS_KEY,
         aws_secret_access_key=MINIO_SECRET_KEY,
     )
-    s3.upload_file(local_path, MINIO_BUCKET, remote_key)
-    os.unlink(local_path)
+    try:
+        s3.upload_file(local_path, MINIO_BUCKET, remote_key)
+    finally:
+        os.unlink(local_path)
 
     logger.info(f"Uploaded parquet to s3://{MINIO_BUCKET}/{remote_key} ({num_rows} rows)")
     return remote_key
