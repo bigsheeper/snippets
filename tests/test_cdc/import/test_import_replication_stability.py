@@ -45,7 +45,7 @@ from common import (
     cluster_A_client, cluster_B_client,
     init_replication_a_to_b,
     setup_collection, cleanup_collection, drop_if_exists,
-    query_all, wait_for_query_consistent,
+    query_all, wait_for_query_consistent, wait_for_row_count,
 )
 
 generate_and_upload_parquet = imp_common.generate_and_upload_parquet
@@ -84,9 +84,13 @@ def _query_ids(client, collection, ids):
 
 
 def _assert_consistent(primary, standby, collection, expected_count, label):
-    actual_a = count_rows(primary, collection)
-    assert actual_a == expected_count, \
-        f"[{label}] A count expected={expected_count}, got={actual_a}"
+    """Wait for A to reach expected_count, then verify B matches A's PK set.
+
+    Commit → query-visible has a sealing/flushing lag on A; the SDK
+    delete of not-yet-visible rows is a no-op, so asserting A's count
+    instantly races the import pipeline.
+    """
+    wait_for_row_count(primary, collection, expected_count, timeout=120)
     a_rows = query_all(primary, collection)
     wait_for_query_consistent(collection, a_rows, standby)
     logger.info(f"  [{label}] A=B={expected_count} OK")
