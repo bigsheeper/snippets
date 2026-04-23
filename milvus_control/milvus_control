@@ -300,11 +300,18 @@ function stop_milvus() {
     fi
 
     # Find all milvus PIDs belonging to a cluster by ETCD_ROOTPATH env var
+    # Works on both Linux (/proc/$pid/environ) and macOS (ps eww)
     find_cluster_pids() {
         local etcd_root=$1
         local pids=""
-        for pid in $(pgrep -x milvus 2>/dev/null); do
-            if tr '\0' '\n' < /proc/$pid/environ 2>/dev/null | grep -q "ETCD_ROOTPATH=$etcd_root"; then
+        for pid in $(pgrep -f "milvus run" 2>/dev/null); do
+            local env_output=""
+            if [[ -r "/proc/$pid/environ" ]]; then
+                env_output=$(tr '\0' '\n' < /proc/$pid/environ 2>/dev/null)
+            else
+                env_output=$(ps eww -p $pid 2>/dev/null | tr ' ' '\n')
+            fi
+            if echo "$env_output" | grep -q "ETCD_ROOTPATH=$etcd_root"; then
                 pids="$pids $pid"
             fi
         done
