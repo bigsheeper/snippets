@@ -16,9 +16,10 @@ CLUSTER_C_ID = "by-dev3"
 # --- Cluster Addresses ---
 DEFAULT_CLUSTER_A_ADDR = "tcp://localhost:19530"
 DEFAULT_CLUSTER_B_ADDR = "tcp://localhost:19531"
+DEFAULT_CLUSTER_C_ADDR = "tcp://localhost:19532"
 CLUSTER_A_ADDR = os.getenv("CLUSTER_A_ADDR", DEFAULT_CLUSTER_A_ADDR)
 CLUSTER_B_ADDR = os.getenv("CLUSTER_B_ADDR", DEFAULT_CLUSTER_B_ADDR)
-CLUSTER_C_ADDR = os.getenv("CLUSTER_C_ADDR", "https://localhost:19532")
+CLUSTER_C_ADDR = os.getenv("CLUSTER_C_ADDR", DEFAULT_CLUSTER_C_ADDR)
 
 # --- Schema ---
 DEFAULT_DIM = 4
