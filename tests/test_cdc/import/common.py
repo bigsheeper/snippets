@@ -25,8 +25,8 @@ import requests
 from loguru import logger
 
 # --- REST / MinIO config ---
-CLUSTER_A_REST_URI = os.getenv("CLUSTER_A_REST_URI", "http://localhost:19530")
-CLUSTER_B_REST_URI = os.getenv("CLUSTER_B_REST_URI", "http://localhost:19531")
+CLUSTER_A_REST_URI = os.getenv("CLUSTER_A_REST_URI", "http://localhost:18530")
+CLUSTER_B_REST_URI = os.getenv("CLUSTER_B_REST_URI", "http://localhost:18531")
 
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
