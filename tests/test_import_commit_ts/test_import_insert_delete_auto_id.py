@@ -22,7 +22,7 @@ from common import (
     import_create, import_commit, wait_for_import_state, wait_for_import_done,
 )
 
-DURATION_MINUTES = int(os.getenv("STABILITY_DURATION_MINUTES", "30"))
+DURATION_MINUTES = int(os.getenv("STABILITY_DURATION_MINUTES", "120"))
 NUM_IMPORT_ROWS = 500
 INSERT_BATCH_SIZE = 50
 INSERT_DELETE_COUNT = 30     # 60% of INSERT_BATCH_SIZE
