@@ -10,10 +10,8 @@ if [[ -z "${MILVUS_DEV_PATH}" ]]; then
 fi
 echo "MILVUS_DEV_PATH: ${MILVUS_DEV_PATH}"
 
-if [[ -z "${MILVUS_VOLUME_DIRECTORY}" ]]; then
-    echo "MILVUS_VOLUME_DIRECTORY is not set or is empty"
-    exit 1
-fi
+# Volume directories go on the data disk unless the caller says otherwise.
+MILVUS_VOLUME_DIRECTORY="${MILVUS_VOLUME_DIRECTORY:-/data/tmp/milvus-volumes}"
 echo "MILVUS_VOLUME_DIRECTORY: ${MILVUS_VOLUME_DIRECTORY}"
 
 # Function to display usage

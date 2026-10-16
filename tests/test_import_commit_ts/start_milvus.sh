@@ -3,7 +3,7 @@
 #
 # Usage:
 #   export MILVUS_DEV_PATH=~/workspace/milvus/.worktrees/test-import-commit-ts
-#   export MILVUS_VOLUME_DIRECTORY=/tmp/milvus-volumes
+#   export MILVUS_VOLUME_DIRECTORY=/data/tmp/milvus-volumes
 #   bash start_milvus.sh
 
 set -e

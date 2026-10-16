@@ -9,9 +9,9 @@ snippets of code
 # Set the path to your milvus repository
 export MILVUS_DEV_PATH="$REPOSITORY_PATH/chyezh/milvus"
 # Set the path to your milvus volumes to store the milvus cluster.
-export MILVUS_VOLUME_DIRECTORY="$HOME/tmp/milvus-volumes"
+export MILVUS_VOLUME_DIRECTORY="/data/tmp/milvus-volumes"
 # Set the path to your inf data volumes
-export MILVUS_INF_VOLUME_DIRECTORY="$HOME/volumes"
+export MILVUS_INF_VOLUME_DIRECTORY="/data/tmp/volumes"
 # Set the path to your monitor data volumes
 export MONITOR_VOLUME_DIRECTORY="$MILVUS_INF_VOLUME_DIRECTORY/monitor"
 # Set the path to your filebrowser volumes

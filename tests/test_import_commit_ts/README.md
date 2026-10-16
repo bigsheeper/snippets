@@ -23,7 +23,7 @@ Based on:
 ```bash
 # 1. Set environment
 export MILVUS_DEV_PATH=~/workspace/milvus/.worktrees/test-import-commit-ts
-export MILVUS_VOLUME_DIRECTORY=~/milvus-volumes
+export MILVUS_VOLUME_DIRECTORY=/data/tmp/milvus-volumes
 conda activate milvus2
 
 # 2. Build Milvus (needs both PR #48472 and #48524 merged)
