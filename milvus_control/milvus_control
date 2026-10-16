@@ -29,6 +29,8 @@ usage() {
     echo "  -k    Use Kafka as message queue (default: Pulsar)"
     echo "  -r    Use RocksMQ as message queue (default: Pulsar)"
     echo "  -u    Reuse the last volume directory instead of creating a new one"
+    echo "  -n N  gc_volumes: keep the newest N volume directories (default: 3)"
+    echo "  --dry-run    gc_volumes: only print what would be deleted"
     echo "  --primary    Start/Stop only primary Milvus instance (by-dev1, port 19530)"
     echo "  --standby    Start/Stop only standby Milvus instance (by-dev2, port 19531)"
     echo ""
@@ -39,6 +41,7 @@ usage() {
     echo "  stop_milvus_inf     Stop Milvus infrastructure"
     echo "  start_milvus_full   Start both infrastructure and Milvus server"
     echo "  stop_milvus_full    Stop both Milvus server and infrastructure"
+    echo "  gc_volumes          Delete old volume directories; keeps the newest N and any in use"
     echo ""
     exit 1
 }
@@ -78,6 +81,18 @@ while [[ $# -gt 0 ]]; do
         REUSE_LAST_VOLUME=1
         shift
         ;;
+    -n)
+        if [[ ! "$2" =~ ^[0-9]+$ ]]; then
+            echo "-n requires a non-negative integer"
+            usage
+        fi
+        KEEP_VOLUMES=$2
+        shift 2
+        ;;
+    --dry-run)
+        DRY_RUN=1
+        shift
+        ;;
     --primary)
         STOP_PRIMARY_ONLY=1
         shift
@@ -114,6 +129,65 @@ find_last_milvus_volume() {
     else
         echo "No volume found" >&2
         return 1
+    fi
+}
+
+# A volume is in use when a docker container mounts a path under it, or a
+# running "milvus run" process holds a file open under it.
+volume_in_use() {
+    local vol=$1
+    if [[ -z "${_DOCKER_MOUNT_SOURCES+x}" ]]; then
+        _DOCKER_MOUNT_SOURCES=$(docker ps -aq 2>/dev/null | xargs -r docker inspect --format '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' 2>/dev/null)
+    fi
+    if printf '%s\n' "$_DOCKER_MOUNT_SOURCES" | awk -v v="$vol" '$0 == v || index($0, v "/") == 1 {f=1} END {exit !f}'; then
+        return 0
+    fi
+    for pid in $(pgrep -f "milvus run" 2>/dev/null); do
+        if [[ -d "/proc/$pid/fd" ]] && find "/proc/$pid/fd" -maxdepth 1 -lname "${vol}/*" 2>/dev/null | grep -q .; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+function gc_volumes() {
+    local keep=${KEEP_VOLUMES:-3}
+    local kept=0 freed_kb=0
+    local leftovers=()
+    while IFS= read -r vol; do
+        [[ -z "$vol" ]] && continue
+        if volume_in_use "$vol"; then
+            echo "keep (in use)   $vol"
+            continue
+        fi
+        if (( kept < keep )); then
+            kept=$((kept + 1))
+            echo "keep (newest)   $vol"
+            continue
+        fi
+        local before_kb after_kb
+        before_kb=$(du -sk "$vol" 2>/dev/null | cut -f1)
+        if [[ -n "${DRY_RUN}" ]]; then
+            echo "would delete    $vol ($(numfmt --from-unit=1024 --to=iec "${before_kb:-0}"))"
+            continue
+        fi
+        rm -rf "$vol" 2>/dev/null
+        if [[ -e "$vol" ]]; then
+            after_kb=$(du -sk "$vol" 2>/dev/null | cut -f1)
+            leftovers+=("$vol")
+            echo "partial         $vol (root-owned files remain)"
+        else
+            after_kb=0
+            echo "deleted         $vol ($(numfmt --from-unit=1024 --to=iec "${before_kb:-0}"))"
+        fi
+        freed_kb=$((freed_kb + ${before_kb:-0} - ${after_kb:-0}))
+    done < <(list_milvus_volumes)
+    if [[ -z "${DRY_RUN}" ]]; then
+        echo "Freed $(numfmt --from-unit=1024 --to=iec "$freed_kb")"
+    fi
+    if (( ${#leftovers[@]} > 0 )); then
+        echo "Files written by containers as root could not be removed. Run:"
+        echo "  sudo rm -rf ${leftovers[*]}"
     fi
 }
 
@@ -380,6 +454,9 @@ start_milvus_full)
 stop_milvus_full)
     stop_milvus
     stop_milvus_inf
+    ;;
+gc_volumes)
+    gc_volumes
     ;;
 *)
     usage
