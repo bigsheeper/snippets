@@ -96,14 +96,18 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Function to find the last milvus volume directory
-find_last_milvus_volume() {
+# List milvus volume directories, newest first, one absolute path per line.
+list_milvus_volumes() {
     if [[ -z "$MILVUS_VOLUME_DIRECTORY" || ! -d "$MILVUS_VOLUME_DIRECTORY" ]]; then
         echo "MILVUS_VOLUME_DIRECTORY is not set or not a directory" >&2
         return 1
     fi
+    find "$MILVUS_VOLUME_DIRECTORY" -mindepth 1 -maxdepth 1 -type d ! -name '.' -printf '%T@ %p\n' | sort -k1,1nr | cut -d' ' -f2-
+}
 
-    LAST_VOLUME=$(find "$MILVUS_VOLUME_DIRECTORY" -mindepth 1 -maxdepth 1 -type d ! -name '.' -printf '%T@ %p\n' | sort -k1,1nr | head -n 1 | cut -d' ' -f2-)
+# Function to find the last milvus volume directory
+find_last_milvus_volume() {
+    LAST_VOLUME=$(list_milvus_volumes | head -n 1) || return 1
     if [ -n "$LAST_VOLUME" ]; then
         echo "${LAST_VOLUME}"
         return 0
